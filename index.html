@@ -80,7 +80,7 @@ nav {
 .theme-btn:hover { background: rgba(255,255,255,.22); }
 
 /* PAGE */
-.page { max-width: 1080px; margin: 0 auto; padding: 28px 20px 60px; }
+.page { max-width: 1200px; margin: 0 auto; padding: 28px 20px 60px; }
 
 /* KPI ROW */
 .kpi-row {
@@ -140,7 +140,7 @@ nav {
 }
 
 /* GRID */
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px,1fr)); gap: 14px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px,1fr)); gap: 14px; }
 
 /* BID CARD */
 .card {
@@ -431,12 +431,20 @@ svg.ring { transform: rotate(-90deg); }
 
 /* OVERVIEW */
 .card-overview { padding: 0 18px 14px; display: flex; flex-direction: column; gap: 4px; }
-.ov-scope { font-size: .78rem; color: var(--fg-2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ov-scope { font-size: .78rem; color: var(--fg-2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .ov-cap { font-size: .7rem; color: var(--fg-muted); }
 .d-overview { background: var(--g50); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; display: grid; gap: 10px; }
 .ov-val { font-size: .82rem; color: var(--fg-2); line-height: 1.5; margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ov-list { margin: 2px 0 0; padding-left: 18px; font-size: .82rem; color: var(--fg-2); line-height: 1.5; overflow-wrap: anywhere; }
 .ov-empty { font-size: .78rem; color: var(--fg-muted); }
+
+/* MISSED REASON */
+.missed-reason { padding: 0 18px 12px; font-size: .72rem; line-height: 1.4; color: var(--red); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.d-missed { background: var(--red-bg); border-color: var(--red); }
+.missed-drawer { max-width: 440px; border-radius: 16px; margin-bottom: 24px; }
+.missed-hint { font-size: .8rem; color: var(--fg-muted); margin-bottom: 16px; line-height: 1.5; }
+.reason-err { font-size: .75rem; font-weight: 600; color: var(--red); margin-top: 6px; }
+.reason-other { margin-top: 8px; }
 </style>
 </head><body>
 
@@ -541,6 +549,10 @@ svg.ring { transform: rotate(-90deg); }
             <option value="Samuel">Samuel</option>
           </datalist>
         </div>
+        <div class="form-field full" id="fr-wrap" hidden>
+          <label class="form-label">Reason for Missing the Bid *</label>
+          <div id="fr-picker"></div>
+        </div>
         <div class="form-field full">
           <label class="form-label" for="f-scope">Overview — Scope of Work</label>
           <textarea class="form-textarea" id="f-scope" placeholder="What is this bid about?"></textarea>
@@ -587,6 +599,25 @@ svg.ring { transform: rotate(-90deg); }
         <button type="submit" class="btn-save" id="save-btn">Save Bid →</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- MISSED REASON MODAL -->
+<div class="form-overlay" id="missed-overlay">
+  <div class="form-drawer missed-drawer">
+    <div class="form-head">
+      <div class="form-title">Mark as Missed</div>
+      <button class="close-btn" id="missed-close" aria-label="Close">✕</button>
+    </div>
+    <div class="missed-hint">Tell us why this bid was missed. A reason is required.</div>
+    <div class="form-field">
+      <label class="form-label">Reason for Missing the Bid *</label>
+      <div id="mr-picker"></div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn-cancel" id="missed-cancel">Cancel</button>
+      <button type="button" class="btn-save" id="missed-confirm">Mark as Missed</button>
+    </div>
   </div>
 </div>
 
@@ -650,6 +681,7 @@ function normalizeBid(b) {
     comments: b.comments || '',
     internal_deadline: b.internal_deadline || null,
     missed: !!b.missed,
+    missed_reason: b.missed_reason || '',
     overview: { scope: '', capacity: '', requirements: '', other: '', ...(b.overview || {}) },
   };
 }
@@ -691,13 +723,16 @@ function deadlineClass(d, submitted) {
   return (dt - today) / 86400000 <= 14 ? 'soon' : '';
 }
 
-// Short overview shown on the card (full overview is in the drawer). Omitted when nothing is filled in.
+// Short overview shown on every card (full overview is in the drawer).
 function cardOverview(b) {
   const o = b.overview;
-  if (!o.scope && !o.capacity) return '';
+  const body = (o.scope || o.capacity)
+    ? `${o.scope ? `<div class="ov-scope">${esc(o.scope)}</div>` : ''}
+        ${o.capacity ? `<div class="ov-cap">Capacity: ${esc(o.capacity)}</div>` : ''}`
+    : `<div class="ov-empty">No overview yet — add one via Edit Details.</div>`;
   return `<div class="card-overview">
-        ${o.scope ? `<div class="ov-scope">${esc(o.scope)}</div>` : ''}
-        ${o.capacity ? `<div class="ov-cap">Capacity: ${esc(o.capacity)}</div>` : ''}
+        <span class="dl-label">Overview</span>
+        ${body}
       </div>`;
 }
 
@@ -749,6 +784,7 @@ function buildCard(b) {
         <span class="chip chip-mode">${modeIcon} ${esc(b.mode)}</span>
         ${anch}
       </div>
+      ${b.missed && b.missed_reason ? `<div class="missed-reason">Reason: ${esc(b.missed_reason)}</div>` : ''}
       ${cardOverview(b)}
       <div class="card-foot">
         <div class="deadline">
@@ -775,6 +811,9 @@ function buildDrawer(b) {
     <div><span class="dl-label">Anchor</span><div class="dl-date">${esc(b.anchor)}</div></div>
     <div><span class="dl-label">Mode</span><div class="dl-date">${esc(b.mode)}</div></div>
   </div>`;
+  if (b.missed) {
+    html += `<div class="d-notes d-missed"><div class="dl-label">Reason for missing the bid</div><p>${b.missed_reason ? esc(b.missed_reason) : 'No reason recorded — use ✎ Edit Details to add one.'}</p></div>`;
+  }
   if (b.comments) {
     html += `<div class="d-notes"><div class="dl-label">Notes</div><p>${esc(b.comments)}</p></div>`;
   }
@@ -845,16 +884,18 @@ async function commitSections(b, mutate) {
 }
 
 // status: 'submitted' | 'missed' | 'inprog'  (the three are mutually exclusive)
-async function setStatus(b, status) {
+// Returns true when the status was saved.
+async function setStatus(b, status, reason = '') {
   const submitted = status === 'submitted';
   const missed = status === 'missed';
   const pct = submitted ? 1 : computePct(b.sections);   // missed/reverting keeps the real completion
   const { ok } = await save(
-    sb.from('bids').update({ submitted, missed, pct }).eq('id', b.id).select('id'),
+    sb.from('bids').update({ submitted, missed, missed_reason: missed ? reason : null, pct }).eq('id', b.id).select('id'),
     submitted ? 'Marked submitted ✓' : missed ? 'Marked missed ✓' : 'Reverted ✓');
-  if (!ok) return;
-  b.submitted = submitted; b.missed = missed; b.pct = pct;
+  if (!ok) return false;
+  b.submitted = submitted; b.missed = missed; b.missed_reason = missed ? reason : ''; b.pct = pct;
   closeDrawer(); render(); updateKPIs();
+  return true;
 }
 
 async function deleteBid(b) {
@@ -904,7 +945,7 @@ document.getElementById('d-body').addEventListener('click', e => {
     }
     case 'edit':   openForm(b); break;
     case 'submit': setStatus(b, 'submitted'); break;
-    case 'missed': setStatus(b, 'missed'); break;
+    case 'missed': openMissedModal(b); break;
     case 'revert': setStatus(b, 'inprog'); break;
     case 'delete': deleteBid(b); break;
   }
@@ -991,6 +1032,83 @@ themeBtn.addEventListener('click', () => {
 
 
 
+// ── MISSED REASON ──────────────────────────────────────────────────────
+const REASONS = ['Deadline missed', 'Required document unavailable', 'Technical requirement not met',
+                 'Pricing issue', 'Bid withdrawn', 'Other'];
+const OTHER_PREFIX = 'Other — ';
+
+// Dropdown + "Other" text box + inline error, shared by the Missed modal ('mr') and the edit form ('fr')
+function pickerHtml(pre) {
+  return `<select class="form-select" id="${pre}-sel" style="width:100%">
+      <option value="">Select a reason…</option>
+      ${REASONS.map(r => `<option>${r}</option>`).join('')}
+    </select>
+    <input class="form-input reason-other" id="${pre}-other" type="text" placeholder="Describe the reason…" hidden>
+    <div class="reason-err" id="${pre}-err" hidden></div>`;
+}
+
+function syncOther(pre) {
+  document.getElementById(pre + '-other').hidden = document.getElementById(pre + '-sel').value !== 'Other';
+}
+
+function fillReason(pre, reason) {
+  const sel = document.getElementById(pre + '-sel'), other = document.getElementById(pre + '-other');
+  document.getElementById(pre + '-err').hidden = true;
+  other.value = '';
+  if (REASONS.includes(reason) && reason !== 'Other') sel.value = reason;
+  else if (reason) { sel.value = 'Other'; other.value = reason.startsWith(OTHER_PREFIX) ? reason.slice(OTHER_PREFIX.length) : reason; }
+  else sel.value = '';
+  syncOther(pre);
+}
+
+// Returns the reason string, or null (and shows an inline error) if it is missing.
+function readReason(pre) {
+  const sel = document.getElementById(pre + '-sel'), other = document.getElementById(pre + '-other');
+  const err = document.getElementById(pre + '-err');
+  let msg = '', reason = sel.value;
+  if (!reason) msg = 'Please select a reason.';
+  else if (reason === 'Other') {
+    const text = other.value.trim();
+    if (!text) msg = 'Please describe the reason.'; else reason = OTHER_PREFIX + text;
+  }
+  err.textContent = msg; err.hidden = !msg;
+  if (msg) (reason === 'Other' || sel.value === 'Other' ? other : sel).focus();
+  return msg ? null : reason;
+}
+
+['mr', 'fr'].forEach(pre => {
+  document.getElementById(pre + '-picker').innerHTML = pickerHtml(pre);
+  document.getElementById(pre + '-sel').addEventListener('change', () => { syncOther(pre); document.getElementById(pre + '-err').hidden = true; });
+});
+
+const missedOverlay = document.getElementById('missed-overlay');
+let missedBidId = null;
+
+function openMissedModal(b) {
+  missedBidId = b.id;
+  fillReason('mr', '');
+  missedOverlay.classList.add('open');
+  document.getElementById('mr-sel').focus();
+}
+function closeMissedModal() {
+  missedOverlay.classList.remove('open');
+  missedBidId = null;
+  if (refreshPending) refreshBids();
+}
+document.getElementById('missed-close').addEventListener('click', closeMissedModal);
+document.getElementById('missed-cancel').addEventListener('click', closeMissedModal);
+missedOverlay.addEventListener('click', e => { if (e.target === missedOverlay) closeMissedModal(); });
+document.getElementById('missed-confirm').addEventListener('click', async () => {
+  const b = bids.find(x => x.id === missedBidId);
+  if (!b) return;
+  const reason = readReason('mr');
+  if (!reason) return;                      // a reason is required
+  const btn = document.getElementById('missed-confirm');
+  btn.disabled = true;
+  try { if (await setStatus(b, 'missed', reason)) closeMissedModal(); }
+  finally { btn.disabled = false; }
+});
+
 // ── ADD / EDIT BID FORM ────────────────────────────────────────────────
 const formOverlay  = document.getElementById('form-overlay');
 const openFormBtn  = document.getElementById('open-form-btn');
@@ -1008,6 +1126,8 @@ function openForm(bid = null) {
   document.getElementById('form-title').textContent = bid ? 'Edit Bid' : 'Add New Bid';
   document.getElementById('save-btn').textContent = bid ? 'Save Changes' : 'Save Bid →';
   document.querySelector('.dept-adder').hidden = !!bid;
+  document.getElementById('fr-wrap').hidden = !(bid && bid.missed);
+  fillReason('fr', bid && bid.missed ? bid.missed_reason : '');
   docRowsEl.innerHTML = '';
   xlsxStatus.hidden = true;
   xlsxStatus.className = 'xlsx-status';
@@ -1196,6 +1316,11 @@ document.getElementById('new-bid-form').addEventListener('submit', async e => {
   try {
     if (editingId) {
       const b = bids.find(x => x.id === editingId);
+      if (b.missed) {                       // a missed bid must keep a reason
+        const reason = readReason('fr');
+        if (!reason) return;
+        details.missed_reason = reason;
+      }
       const { ok } = await save(sb.from('bids').update(details).eq('id', editingId).select('id'), 'Bid updated ✓');
       if (!ok) return;
       Object.assign(b, details);
@@ -1295,7 +1420,7 @@ async function loadBids() {
 // Re-fetch so changes made by other people show up. Skipped while a drawer/form is
 // open or a save is in flight (so nothing under the user's hands gets replaced).
 function isBusy() {
-  return pendingSaves > 0 || overlay.classList.contains('open') || formOverlay.classList.contains('open');
+  return pendingSaves > 0 || overlay.classList.contains('open') || formOverlay.classList.contains('open') || missedOverlay.classList.contains('open');
 }
 
 async function refreshBids() {
