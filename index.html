@@ -239,12 +239,6 @@ svg.ring { transform: rotate(-90deg); }
   border-bottom: 1px solid var(--border); font-size: .82rem; color: var(--fg-2);
 }
 .checklist-item:last-child { border-bottom: none; }
-.status-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-}
-.dot-ok  { background: var(--g500); }
-.dot-pend { background: var(--amber); }
-.dot-na  { background: var(--border); }
 .item-dept { font-size: .68rem; color: var(--fg-muted); margin-left: auto; font-weight: 500; white-space: nowrap; }
 
 /* ADD BID FORM */
@@ -392,8 +386,33 @@ svg.ring { transform: rotate(-90deg); }
 .btn-delete-bid:hover { opacity: .8; }
 
 /* CLICKABLE DOTS in drawer */
-.status-dot[data-act] { cursor: pointer; transition: transform .12s; }
-.status-dot[data-act]:hover { transform: scale(1.3); }
+/* CHECKLIST CHECKBOX */
+.checklist-item { gap: 12px; padding: 10px 0; }
+.chk {
+  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+  border: 2px solid var(--amber); background: var(--surface);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background .12s, border-color .12s, box-shadow .12s, transform .1s;
+}
+.chk:hover { transform: scale(1.08); box-shadow: 0 0 0 3px var(--amber-bg); }
+.chk:focus-visible { outline: 2px solid var(--g500); outline-offset: 2px; }
+.chk svg {
+  width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 2.4;
+  stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 16; stroke-dashoffset: 16; opacity: 0;
+  transition: stroke-dashoffset .18s, opacity .1s;
+}
+.chk.checked { background: var(--g700); border-color: var(--g700); }
+.chk.checked:hover { box-shadow: 0 0 0 3px var(--g100); }
+.chk.checked svg { stroke-dashoffset: 0; opacity: 1; }
+.chk.na { border: 2px dashed var(--fg-muted); background: var(--bg); }
+.chk.na:hover { box-shadow: 0 0 0 3px var(--border); }
+.item-na {
+  font-size: .65rem; font-weight: 600; color: var(--fg-muted); flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 7px;
+}
+.item-na:hover { background: var(--g50); color: var(--fg-2); }
+.item-na.on { background: var(--border); color: var(--fg-2); }
 
 /* SAVING INDICATOR */
 .saving-toast {
@@ -798,8 +817,6 @@ function buildCard(b) {
 }
 
 // ── CHECKLIST DRAWER ───────────────────────────────────────────────────
-const NEXT_STATUS = { 'Pending': 'Available', 'Available': 'N/A', 'N/A': 'Pending' };
-
 function buildDrawer(b) {
   openBidId = b.id;
   document.getElementById('d-title').textContent = b.name;
@@ -826,11 +843,13 @@ function buildDrawer(b) {
       <div class="dept-heading">${esc(section)} — ${ok}/${counted.length} ready${items.length === 0
         ? ` <button type="button" class="item-remove" data-act="remove-section" data-sec="${sKey}" title="Remove empty section">✕</button>` : ''}</div>`;
     items.forEach((item, idx) => {
-      const cls = item.status === 'Available' ? 'dot-ok' : item.status === 'N/A' ? 'dot-na' : 'dot-pend';
-      html += `<div class="checklist-item${item.status === 'N/A' ? ' na' : ''}">
-        <span class="status-dot ${cls}" data-act="toggle" data-sec="${sKey}" data-idx="${idx}" title="${esc(item.status)} — click to cycle Pending → Available → N/A"></span>
+      const checked = item.status === 'Available';
+      const isNA = item.status === 'N/A';
+      html += `<div class="checklist-item${isNA ? ' na' : ''}">
+        <button type="button" class="chk${checked ? ' checked' : isNA ? ' na' : ''}" role="checkbox" aria-checked="${isNA ? 'mixed' : checked}" aria-label="${esc(item.doc)}" data-act="toggle" data-sec="${sKey}" data-idx="${idx}" title="${checked ? 'Obtained — click to uncheck' : 'Outstanding — click to mark as obtained'}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg></button>
         <span class="item-doc">${esc(item.doc)}</span>
-        <span class="item-dept">${item.status === 'N/A' ? 'N/A · ' : ''}${esc(item.dept)}</span>
+        <span class="item-dept">${esc(item.dept)}</span>
+        <button type="button" class="item-na${isNA ? ' on' : ''}" data-act="na" data-sec="${sKey}" data-idx="${idx}" title="${isNA ? 'Marked not applicable — click to restore' : 'Mark as not applicable'}">N/A</button>
         <button type="button" class="item-remove" data-act="remove" data-sec="${sKey}" data-idx="${idx}" title="Remove this item">✕</button>
       </div>`;
     });
@@ -918,7 +937,10 @@ document.getElementById('d-body').addEventListener('click', e => {
 
   switch (el.dataset.act) {
     case 'toggle':
-      commitSections(b, s => { const it = s[sec][idx]; it.status = NEXT_STATUS[it.status] || 'Available'; });
+      commitSections(b, s => { const it = s[sec][idx]; it.status = it.status === 'Available' ? 'Pending' : 'Available'; });
+      break;
+    case 'na':
+      commitSections(b, s => { const it = s[sec][idx]; it.status = it.status === 'N/A' ? 'Pending' : 'N/A'; });
       break;
     case 'remove':
       commitSections(b, s => { s[sec].splice(idx, 1); });
