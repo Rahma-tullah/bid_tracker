@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
 <title>Prado Power Bid Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap">
@@ -392,8 +392,8 @@ svg.ring { transform: rotate(-90deg); }
 .btn-delete-bid:hover { opacity: .8; }
 
 /* CLICKABLE DOTS in drawer */
-.status-dot[data-clickable] { cursor: pointer; transition: transform .12s; }
-.status-dot[data-clickable]:hover { transform: scale(1.3); }
+.status-dot[data-act] { cursor: pointer; transition: transform .12s; }
+.status-dot[data-act]:hover { transform: scale(1.3); }
 
 /* SAVING INDICATOR */
 .saving-toast {
@@ -404,7 +404,25 @@ svg.ring { transform: rotate(-90deg); }
 }
 .saving-toast.visible { opacity: 1; }
 
+/* DRAWER: meta, notes, inline editing */
+.d-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.d-notes { background: var(--g50); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 20px; }
+.d-notes p { font-size: .82rem; color: var(--fg-2); line-height: 1.5; margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dl-internal { font-size: .68rem; color: var(--fg-muted); }
+.checklist-item.na .item-doc { color: var(--fg-muted); text-decoration: line-through; }
+.item-remove { width: 22px; height: 22px; border-radius: 6px; font-size: .75rem; color: var(--fg-muted); flex-shrink: 0; opacity: .6; }
+.item-remove:hover { background: var(--red-bg); color: var(--red); opacity: 1; }
+.add-item-row { display: flex; gap: 8px; margin-top: 8px; }
+.add-item-row input { flex: 1; min-width: 0; padding: 7px 10px; font-size: .8rem; }
+.add-item-row select { width: 110px; flex-shrink: 0; padding: 7px 8px; font-size: .8rem; }
+.add-section-row { margin: 4px 0 8px; }
+.btn-add-item { font-size: .75rem; font-weight: 600; color: var(--g700); background: var(--g100); border-radius: 8px; padding: 0 12px; white-space: nowrap; }
+.btn-add-item:hover { background: var(--g200); }
+.btn-edit { flex: 1; min-width: 120px; padding: 10px 16px; border-radius: 8px; font-size: .82rem; font-weight: 600; background: var(--g100); color: var(--g900); }
+.btn-edit:hover { background: var(--g200); }
+.saving-toast.error { background: var(--red); }
 </style>
+</head><body>
 
 <nav>
   <div class="logo">
@@ -468,7 +486,7 @@ svg.ring { transform: rotate(-90deg); }
 <div class="form-overlay" id="form-overlay">
   <div class="form-drawer">
     <div class="form-head">
-      <div class="form-title">Add New Bid</div>
+      <div class="form-title" id="form-title">Add New Bid</div>
       <button class="close-btn" id="close-form-btn">✕</button>
     </div>
     <form id="new-bid-form" novalidate>
@@ -533,7 +551,7 @@ svg.ring { transform: rotate(-90deg); }
 
       <div class="form-actions">
         <button type="button" class="btn-cancel" id="cancel-form-btn">Cancel</button>
-        <button type="submit" class="btn-save">Save Bid →</button>
+        <button type="submit" class="btn-save" id="save-btn">Save Bid →</button>
       </div>
     </form>
   </div>
@@ -572,8 +590,41 @@ try {
 } catch(e) { console.error('Supabase init failed:', e); }
 
 let bids = [];
+let openBidId = null;     // bid currently shown in the checklist drawer
+let editingId = null;     // bid currently being edited in the form (null = new bid)
+let pendingSaves = 0;
+let refreshPending = false;
 
 // ── UTILITIES ──────────────────────────────────────────────────────────
+// Escape anything user-supplied before it goes into innerHTML.
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+// "—", "-" and blank all mean "unassigned"
+function normalizeAnchor(a) {
+  const s = String(a ?? '').trim();
+  return (!s || s === '-' || s === '—') ? '—' : s;
+}
+
+function normalizeBid(b) {
+  return {
+    ...b,
+    anchor: normalizeAnchor(b.anchor),
+    sections: b.sections || {},
+    pct: Number(b.pct) || 0,
+    comments: b.comments || '',
+    internal_deadline: b.internal_deadline || null,
+  };
+}
+
+// Completion = Available / (everything that isn't N/A)
+function computePct(sections) {
+  const items = Object.values(sections).flat().filter(i => i.status !== 'N/A');
+  return items.length ? items.filter(i => i.status === 'Available').length / items.length : 0;
+}
+
 function ring(pct, submitted) {
   const fill = Math.round(pct * CIRC);
   const amber = !submitted && pct < 0.9;
@@ -585,19 +636,24 @@ function ring(pct, submitted) {
     </svg>`;
 }
 
+// Parse YYYY-MM-DD as a LOCAL date (new Date('YYYY-MM-DD') is UTC and can land on the previous day)
+function parseDate(d) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || '');
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+}
+
 function fmtDate(d) {
-  if (d === 'TBD') return 'TBD';
-  const dt = new Date(d);
-  return dt.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+  const dt = parseDate(d);
+  return dt ? dt.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : 'TBD';
 }
 
 function deadlineClass(d, submitted) {
   if (submitted) return 'past';
-  if (d === 'TBD') return '';
-  const now = new Date(); const dt = new Date(d);
-  if (dt < now) return 'past';
-  const diff = (dt - now) / 86400000;
-  return diff <= 14 ? 'soon' : '';
+  const dt = parseDate(d);
+  if (!dt) return '';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (dt < today) return 'past';
+  return (dt - today) / 86400000 <= 14 ? 'soon' : '';
 }
 
 function buildCard(b) {
@@ -607,15 +663,17 @@ function buildCard(b) {
     ? `<span class="chip chip-sub">✓ Submitted</span>`
     : `<span class="chip chip-prog">⏳ In Progress</span>`;
   const modeIcon = b.mode === 'Online' ? '🌐' : '📦';
-  const anch = b.anchor !== '—' ? `<span class="chip chip-anch">👤 ${b.anchor}</span>` : '';
+  const anch = b.anchor !== '—' ? `<span class="chip chip-anch">👤 ${esc(b.anchor)}</span>` : '';
   const dlClass = deadlineClass(b.deadline, sub);
+  const internal = b.internal_deadline
+    ? `<span class="dl-internal">Internal: ${esc(fmtDate(b.internal_deadline))}</span>` : '';
 
   return `
-    <div class="card ${sub ? '' : 'inprog'}" data-id="${b.id}" data-sub="${sub}" data-anchor="${b.anchor}">
+    <div class="card ${sub ? '' : 'inprog'}" data-id="${esc(b.id)}" data-sub="${sub}" data-anchor="${esc(b.anchor)}">
       <div class="card-top">
         <div class="card-info">
-          <div class="card-name">${b.name}</div>
-          <div class="card-client">${b.client}</div>
+          <div class="card-name">${esc(b.name)}</div>
+          <div class="card-client">${esc(b.client)}</div>
         </div>
         <div class="ring-wrap">
           ${ring(b.pct, b.submitted)}
@@ -624,122 +682,170 @@ function buildCard(b) {
       </div>
       <div class="card-chips">
         ${statusChip}
-        <span class="chip chip-mode">${modeIcon} ${b.mode}</span>
+        <span class="chip chip-mode">${modeIcon} ${esc(b.mode)}</span>
         ${anch}
       </div>
       <div class="card-foot">
         <div class="deadline">
           <span class="dl-label">Deadline</span>
-          <span class="dl-date ${dlClass}">${fmtDate(b.deadline)}</span>
+          <span class="dl-date ${dlClass}">${esc(fmtDate(b.deadline))}</span>
+          ${internal}
         </div>
-        <button class="view-btn" data-id="${b.id}">View Checklist →</button>
+        <button class="view-btn" data-id="${esc(b.id)}">View Checklist →</button>
       </div>
     </div>`;
 }
 
+// ── CHECKLIST DRAWER ───────────────────────────────────────────────────
+const NEXT_STATUS = { 'Pending': 'Available', 'Available': 'N/A', 'N/A': 'Pending' };
+
 function buildDrawer(b) {
+  openBidId = b.id;
   document.getElementById('d-title').textContent = b.name;
   document.getElementById('d-sub').textContent = b.client;
-  let html = '';
+
+  let html = `<div class="d-meta">
+    <div><span class="dl-label">Deadline</span><div class="dl-date">${esc(fmtDate(b.deadline))}</div></div>
+    <div><span class="dl-label">Internal deadline</span><div class="dl-date">${b.internal_deadline ? esc(fmtDate(b.internal_deadline)) : '—'}</div></div>
+    <div><span class="dl-label">Anchor</span><div class="dl-date">${esc(b.anchor)}</div></div>
+    <div><span class="dl-label">Mode</span><div class="dl-date">${esc(b.mode)}</div></div>
+  </div>`;
+  if (b.comments) {
+    html += `<div class="d-notes"><div class="dl-label">Notes</div><p>${esc(b.comments)}</p></div>`;
+  }
+
   for (const [section, items] of Object.entries(b.sections)) {
-    const ok = items.filter(i => i.status === 'Available').length;
+    const counted = items.filter(i => i.status !== 'N/A');
+    const ok = counted.filter(i => i.status === 'Available').length;
+    const sKey = encodeURIComponent(section);
     html += `<div class="dept-section">
-      <div class="dept-heading">${section} — ${ok}/${items.length} ready</div>`;
+      <div class="dept-heading">${esc(section)} — ${ok}/${counted.length} ready${items.length === 0
+        ? ` <button type="button" class="item-remove" data-act="remove-section" data-sec="${sKey}" title="Remove empty section">✕</button>` : ''}</div>`;
     items.forEach((item, idx) => {
       const cls = item.status === 'Available' ? 'dot-ok' : item.status === 'N/A' ? 'dot-na' : 'dot-pend';
-      const sKey = encodeURIComponent(section);
-      html += `<div class="checklist-item">
-        <span class="status-dot ${cls}" data-clickable data-bid="${b.id}" data-sec="${sKey}" data-idx="${idx}" title="Click to toggle Available / Pending"></span>
-        <span>${item.doc}</span>
-        <span class="item-dept">${item.dept}</span>
+      html += `<div class="checklist-item${item.status === 'N/A' ? ' na' : ''}">
+        <span class="status-dot ${cls}" data-act="toggle" data-sec="${sKey}" data-idx="${idx}" title="${esc(item.status)} — click to cycle Pending → Available → N/A"></span>
+        <span class="item-doc">${esc(item.doc)}</span>
+        <span class="item-dept">${item.status === 'N/A' ? 'N/A · ' : ''}${esc(item.dept)}</span>
+        <button type="button" class="item-remove" data-act="remove" data-sec="${sKey}" data-idx="${idx}" title="Remove this item">✕</button>
       </div>`;
     });
-    html += `</div>`;
+    html += `<div class="add-item-row">
+      <input class="form-input" type="text" placeholder="Add a document to ${esc(section)}…">
+      <select class="form-select">${DEPTS.map(d => `<option>${d}</option>`).join('')}</select>
+      <button type="button" class="btn-add-item" data-act="add-item" data-sec="${sKey}">+ Add</button>
+    </div></div>`;
   }
+
+  html += `<div class="add-item-row add-section-row">
+    <input class="form-input" id="new-section-name" type="text" placeholder="New section name…">
+    <button type="button" class="btn-add-item" data-act="add-section">+ Add section</button>
+  </div>`;
+
   // Action buttons
   if (sb) {
-    if (!b.submitted) {
-      html += `<div class="drawer-actions">
-        <button class="btn-submitted" data-bid="${b.id}">✓ Mark as Submitted</button>
-        <button class="btn-delete-bid" data-bid="${b.id}">🗑 Delete Bid</button>
-      </div>`;
-    } else {
-      html += `<div class="drawer-actions">
-        <button class="btn-unsubmit" data-bid="${b.id}">↩ Revert to In Progress</button>
-        <button class="btn-delete-bid" data-bid="${b.id}">🗑 Delete Bid</button>
-      </div>`;
-    }
+    html += `<div class="drawer-actions">
+      <button class="btn-edit" data-act="edit">✎ Edit Details</button>
+      ${b.submitted
+        ? `<button class="btn-unsubmit" data-act="revert">↩ Revert to In Progress</button>`
+        : `<button class="btn-submitted" data-act="submit">✓ Mark as Submitted</button>`}
+      <button class="btn-delete-bid" data-act="delete">🗑 Delete Bid</button>
+    </div>`;
   }
   document.getElementById('d-body').innerHTML = html;
+}
 
-  // Dot click — toggle status
-  document.getElementById('d-body').querySelectorAll('.status-dot[data-clickable]').forEach(dot => {
-    dot.addEventListener('click', async () => {
-      const bidId = dot.dataset.bid;
-      const sec   = decodeURIComponent(dot.dataset.sec);
-      const idx   = parseInt(dot.dataset.idx);
-      const bid   = bids.find(x => x.id === bidId || x.id == bidId);
-      if (!bid || !sb) return;
-      const cur = bid.sections[sec][idx].status;
-      bid.sections[sec][idx].status = cur === 'Available' ? 'Pending' : 'Available';
-      const allItems = Object.values(bid.sections).flat();
-      bid.pct = allItems.filter(i => i.status === 'Available').length / allItems.length;
-      showToast('Saving…');
-      await sb.from('bids').update({ sections: bid.sections, pct: bid.pct }).eq('id', bidId);
-      showToast('Saved ✓');
-      buildDrawer(bid);
-      render();
-      updateKPIs();
-    });
-  });
+function refreshDrawer(b) {
+  if (openBidId === b.id && overlay.classList.contains('open')) buildDrawer(b);
+}
 
-  // Mark submitted / revert
-  const submitBtn = document.getElementById('d-body').querySelector('.btn-submitted');
-  const revertBtn = document.getElementById('d-body').querySelector('.btn-unsubmit');
-  if (submitBtn) {
-    submitBtn.addEventListener('click', async () => {
-      const bidId = submitBtn.dataset.bid;
-      const bid   = bids.find(x => x.id === bidId || x.id == bidId);
-      if (!bid) return;
-      showToast('Saving…');
-      await sb.from('bids').update({ submitted: true, pct: 1 }).eq('id', bidId);
-      bid.submitted = true; bid.pct = 1;
-      overlay.classList.remove('open');
-      showToast('Marked submitted ✓');
-      render(); updateKPIs();
-    });
-  }
-  if (revertBtn) {
-    revertBtn.addEventListener('click', async () => {
-      const bidId = revertBtn.dataset.bid;
-      const bid   = bids.find(x => x.id === bidId || x.id == bidId);
-      if (!bid) return;
-      showToast('Saving…');
-      await sb.from('bids').update({ submitted: false }).eq('id', bidId);
-      bid.submitted = false;
-      overlay.classList.remove('open');
-      showToast('Reverted ✓');
-      render(); updateKPIs();
-    });
-  }
+function closeDrawer() {
+  overlay.classList.remove('open');
+  openBidId = null;
+  if (refreshPending) refreshBids();
+}
 
-  // Delete bid
-  const delBtn = document.getElementById('d-body').querySelector('.btn-delete-bid');
-  if (delBtn) {
-    delBtn.addEventListener('click', async () => {
-      const bidId = delBtn.dataset.bid;
-      const bid   = bids.find(x => x.id === bidId || x.id == bidId);
-      if (!bid) return;
-      // Note: confirm() works on Vercel but not in the Claude artifact preview
-      const yes = confirm('Delete "' + bid.name + '"? This cannot be undone.');
-      if (!yes) return;
-      await sb.from('bids').delete().eq('id', bidId);
-      bids = bids.filter(x => x.id !== bidId && x.id != bidId);
-      overlay.classList.remove('open');
-      render(); updateKPIs();
-    });
+// Apply a change to a bid's sections, save it, and roll back if the save fails.
+async function commitSections(b, mutate) {
+  const prev = { sections: structuredClone(b.sections), pct: b.pct };
+  mutate(b.sections);
+  b.pct = computePct(b.sections);
+  buildDrawer(b); render(); updateKPIs();
+  const { ok } = await save(sb.from('bids').update({ sections: b.sections, pct: b.pct }).eq('id', b.id).select('id'));
+  if (!ok) {
+    b.sections = prev.sections; b.pct = prev.pct;
+    refreshDrawer(b); render(); updateKPIs();
   }
 }
+
+async function setSubmitted(b, value) {
+  const pct = value ? 1 : computePct(b.sections);   // reverting restores the real completion
+  const { ok } = await save(
+    sb.from('bids').update({ submitted: value, pct }).eq('id', b.id).select('id'),
+    value ? 'Marked submitted ✓' : 'Reverted ✓');
+  if (!ok) return;
+  b.submitted = value; b.pct = pct;
+  closeDrawer(); render(); updateKPIs();
+}
+
+async function deleteBid(b) {
+  // Note: confirm() works on Vercel but not in the Claude artifact preview
+  if (!confirm('Delete "' + b.name + '"? This cannot be undone.')) return;
+  const { ok } = await save(sb.from('bids').delete().eq('id', b.id).select('id'), 'Bid deleted ✓');
+  if (!ok) return;
+  bids = bids.filter(x => x.id !== b.id);
+  closeDrawer(); refreshAnchors(); render(); updateKPIs();
+}
+
+// One delegated handler for everything inside the drawer
+document.getElementById('d-body').addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el || !sb) return;
+  const b = bids.find(x => x.id === openBidId);
+  if (!b) return;
+  const sec = el.dataset.sec !== undefined ? decodeURIComponent(el.dataset.sec) : null;
+  const idx = parseInt(el.dataset.idx);
+
+  switch (el.dataset.act) {
+    case 'toggle':
+      commitSections(b, s => { const it = s[sec][idx]; it.status = NEXT_STATUS[it.status] || 'Available'; });
+      break;
+    case 'remove':
+      commitSections(b, s => { s[sec].splice(idx, 1); });
+      break;
+    case 'remove-section':
+      commitSections(b, s => { delete s[sec]; });
+      break;
+    case 'add-item': {
+      const row = el.closest('.add-item-row');
+      const input = row.querySelector('input');
+      const doc = input.value.trim();
+      if (!doc) { input.focus(); return; }
+      const dept = row.querySelector('select').value;
+      commitSections(b, s => { s[sec].push({ doc, dept, status: 'Pending' }); });
+      break;
+    }
+    case 'add-section': {
+      const input = document.getElementById('new-section-name');
+      const name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      if (b.sections[name]) { showToast('That section already exists', true); return; }
+      commitSections(b, s => { s[name] = []; });
+      break;
+    }
+    case 'edit':   openForm(b); break;
+    case 'submit': setSubmitted(b, true); break;
+    case 'revert': setSubmitted(b, false); break;
+    case 'delete': deleteBid(b); break;
+  }
+});
+
+// Enter in an "add" input behaves like clicking its button
+document.getElementById('d-body').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+  const btn = e.target.closest('.add-item-row')?.querySelector('[data-act]');
+  if (btn) { e.preventDefault(); btn.click(); }
+});
 
 // ── RENDER ─────────────────────────────────────────────────────────────
 const grid = document.getElementById('grid');
@@ -756,17 +862,14 @@ function render() {
   grid.innerHTML = visible.map(buildCard).join('');
   document.getElementById('vis-count').textContent = visible.length;
   document.getElementById('empty').hidden = visible.length > 0;
-  attachViewBtns();
 }
 
-function attachViewBtns() {
-  document.querySelectorAll('.view-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      const id = e.target.dataset.id; const b = bids.find(x => x.id === id || x.id == id);
-      if (b) { buildDrawer(b); overlay.classList.add('open'); }
-    });
-  });
-}
+grid.addEventListener('click', e => {
+  const btn = e.target.closest('.view-btn');
+  if (!btn) return;
+  const b = bids.find(x => x.id === btn.dataset.id);
+  if (b) { buildDrawer(b); overlay.classList.add('open'); }
+});
 
 // Tabs
 document.querySelectorAll('.tab').forEach(tab => {
@@ -785,8 +888,8 @@ document.getElementById('anchor-select').addEventListener('change', e => {
 
 // Checklist modal
 const overlay = document.getElementById('overlay');
-document.getElementById('close-btn').addEventListener('click', () => overlay.classList.remove('open'));
-overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+document.getElementById('close-btn').addEventListener('click', closeDrawer);
+overlay.addEventListener('click', e => { if (e.target === overlay) closeDrawer(); });
 
 // ── THEME TOGGLE ───────────────────────────────────────────────────────
 const themeBtn = document.getElementById('theme-btn');
@@ -817,7 +920,7 @@ themeBtn.addEventListener('click', () => {
 
 
 
-// ── ADD BID FORM ───────────────────────────────────────────────────────
+// ── ADD / EDIT BID FORM ────────────────────────────────────────────────
 const formOverlay  = document.getElementById('form-overlay');
 const openFormBtn  = document.getElementById('open-form-btn');
 const closeFormBtn = document.getElementById('close-form-btn');
@@ -826,17 +929,36 @@ const docRowsEl    = document.getElementById('doc-rows');
 const xlsxStatus   = document.getElementById('xlsx-status');
 const DEPTS = ['BD','Finance','HR','PROJECT','HSE','Procurement','Legal','ADMIN'];
 
-function openForm() {
-  formOverlay.classList.add('open');
+// openForm()    -> new bid
+// openForm(bid) -> edit that bid's details (checklist is edited in the drawer)
+function openForm(bid = null) {
+  editingId = bid ? bid.id : null;
   document.getElementById('new-bid-form').reset();
+  document.getElementById('form-title').textContent = bid ? 'Edit Bid' : 'Add New Bid';
+  document.getElementById('save-btn').textContent = bid ? 'Save Changes' : 'Save Bid →';
+  document.querySelector('.dept-adder').hidden = !!bid;
   docRowsEl.innerHTML = '';
   xlsxStatus.hidden = true;
   xlsxStatus.className = 'xlsx-status';
-  addDocRow();
+  if (bid) {
+    document.getElementById('f-name').value      = bid.name;
+    document.getElementById('f-client').value    = bid.client;
+    document.getElementById('f-deadline').value  = parseDate(bid.deadline) ? bid.deadline.slice(0, 10) : '';
+    document.getElementById('f-internal').value  = bid.internal_deadline ? bid.internal_deadline.slice(0, 10) : '';
+    document.getElementById('f-mode').value      = bid.mode;
+    document.getElementById('f-anchor').value    = bid.anchor === '—' ? '' : bid.anchor;
+    document.getElementById('f-comments').value  = bid.comments;
+  } else {
+    addDocRow();
+  }
+  formOverlay.classList.add('open');
 }
-function closeForm() { formOverlay.classList.remove('open'); }
+function closeForm() {
+  formOverlay.classList.remove('open');
+  if (refreshPending) refreshBids();
+}
 
-openFormBtn.addEventListener('click', openForm);
+openFormBtn.addEventListener('click', () => openForm());
 closeFormBtn.addEventListener('click', closeForm);
 cancelFormBtn.addEventListener('click', closeForm);
 formOverlay.addEventListener('click', e => { if (e.target === formOverlay) closeForm(); });
@@ -845,7 +967,7 @@ function addDocRow(doc = '', dept = 'BD', status = 'Pending') {
   const row = document.createElement('div');
   row.className = 'doc-row';
   row.innerHTML = `
-    <input class="form-input" type="text" placeholder="Document name" value="${doc.replace(/"/g,'&quot;')}">
+    <input class="form-input" type="text" placeholder="Document name" value="${esc(doc)}">
     <select class="form-select">${DEPTS.map(d=>`<option${d===dept?' selected':''}>${d}</option>`).join('')}</select>
     <select class="form-select" style="width:100px">
       <option${status==='Pending'?' selected':''}>Pending</option>
@@ -974,60 +1096,64 @@ xlsxZone.addEventListener('drop', e => {
 // ── FORM SUBMIT ────────────────────────────────────────────────────────
 document.getElementById('new-bid-form').addEventListener('submit', async e => {
   e.preventDefault();
+  if (!sb) { showToast('Supabase is not configured', true); return; }
   const name   = document.getElementById('f-name').value.trim();
   const client = document.getElementById('f-client').value.trim();
   if (!name || !client) { document.getElementById('f-name').focus(); return; }
 
-  const deadline = document.getElementById('f-deadline').value || 'TBD';
-  const anchor   = document.getElementById('f-anchor').value;
-  const mode     = document.getElementById('f-mode').value;
-  const comments = document.getElementById('f-comments').value.trim();
-
-  const docItems = [];
-  docRowsEl.querySelectorAll('.doc-row').forEach(row => {
-    const [nameInput, deptSel, statusSel] = row.querySelectorAll('input, select');
-    if (nameInput.value.trim()) {
-      docItems.push({ doc: nameInput.value.trim(), dept: deptSel.value, status: statusSel.value });
-    }
-  });
-
-  const pct = docItems.length
-    ? docItems.filter(i => i.status === 'Available').length / docItems.length
-    : 0;
-
-  const newBid = {
-    id: Date.now(), name, client, deadline, anchor, mode, pct, submitted: false,
-    sections: docItems.length
-      ? { 'Documents': docItems }
-      : { 'Documents': [{ doc: 'To be defined', dept: 'BD', status: 'Pending' }] },
-    _comment: comments,
+  const details = {
+    name, client,
+    deadline:          document.getElementById('f-deadline').value || 'TBD',
+    internal_deadline: document.getElementById('f-internal').value || null,
+    anchor:            normalizeAnchor(document.getElementById('f-anchor').value),
+    mode:              document.getElementById('f-mode').value,
+    comments:          document.getElementById('f-comments').value.trim(),
   };
 
-  if (sb) {
-    showToast('Saving…');
-    const { data, error } = await sb.from('bids').insert([{
-      name, client, deadline, anchor, mode, pct, submitted: false,
-      sections: newBid.sections, comments
-    }]).select().single();
-    if (!error && data) {
-      newBid.id = data.id;
+  const saveBtn = document.getElementById('save-btn');
+  saveBtn.disabled = true;
+  try {
+    if (editingId) {
+      const b = bids.find(x => x.id === editingId);
+      const { ok } = await save(sb.from('bids').update(details).eq('id', editingId).select('id'), 'Bid updated ✓');
+      if (!ok) return;
+      Object.assign(b, details);
+      closeForm(); refreshAnchors(); render(); updateKPIs(); refreshDrawer(b);
+      return;
     }
+
+    const docItems = [];
+    docRowsEl.querySelectorAll('.doc-row').forEach(row => {
+      const [nameInput, deptSel, statusSel] = row.querySelectorAll('input, select');
+      if (nameInput.value.trim()) {
+        docItems.push({ doc: nameInput.value.trim(), dept: deptSel.value, status: statusSel.value });
+      }
+    });
+    const sections = docItems.length
+      ? { 'Documents': docItems }
+      : { 'Documents': [{ doc: 'To be defined', dept: 'BD', status: 'Pending' }] };
+
+    const { ok, data } = await save(
+      sb.from('bids').insert([{ ...details, pct: computePct(sections), submitted: false, sections }]).select().single(),
+      'Bid added ✓');
+    if (!ok) return;          // keep the form open so nothing typed is lost
+    bids.push(normalizeBid(data));
+    closeForm();
+    refreshAnchors();
+    currentFilter = 'all';
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.filter === 'all'));
+    render();
+    updateKPIs();
+  } finally {
+    saveBtn.disabled = false;
   }
-  bids.push(newBid);
-  closeForm();
-  showToast('Bid added ✓');
-  refreshAnchors();
-  currentFilter = 'all';
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.filter === 'all'));
-  render();
-  updateKPIs();
 });
 
 function updateKPIs() {
   const total     = bids.length;
   const submitted = bids.filter(b => b.submitted).length;
   const inprog    = total - submitted;
-  const avg       = Math.round(bids.reduce((s, b) => s + b.pct, 0) / total * 100);
+  const avg       = total ? Math.round(bids.reduce((s, b) => s + b.pct, 0) / total * 100) : 0;
   const nums = document.querySelectorAll('.kpi-num');
   nums[0].textContent = total;
   nums[1].textContent = submitted;
@@ -1035,11 +1161,32 @@ function updateKPIs() {
   nums[3].textContent = avg + '%';
 }
 
-// ── SUPABASE LOAD ─────────────────────────────────────────────────────
+// ── SUPABASE LOAD / SAVE ──────────────────────────────────────────────
+// Runs a Supabase write, surfaces failures, and returns { ok, data }.
+// A write that matches no rows (deleted elsewhere, or blocked by RLS) counts as a failure.
+async function save(op, okMsg = 'Saved ✓') {
+  pendingSaves++;
+  showToast('Saving…');
+  try {
+    const { data, error } = await op;
+    if (error) throw error;
+    if (Array.isArray(data) && data.length === 0) {
+      throw new Error('Nothing was updated — the bid may have been deleted or you lack permission.');
+    }
+    showToast(okMsg);
+    return { ok: true, data };
+  } catch (err) {
+    console.error('Supabase write failed:', err);
+    showToast('Save failed: ' + (err.message || 'unknown error'), true);
+    return { ok: false };
+  } finally {
+    pendingSaves--;
+  }
+}
+
 async function loadBids() {
   const loadEl  = document.getElementById('loading-state');
   const gridEl  = document.getElementById('grid');
-  const configBanner = document.querySelector('.config-banner');
 
   if (!sb) {
     if (loadEl) loadEl.innerHTML = '<div style="font-size:.85rem;color:var(--amber);background:var(--amber-bg);border:1.5px solid var(--amber);border-radius:10px;padding:16px 20px;max-width:500px;line-height:1.6"><strong>⚠️ Supabase not configured</strong><br>Open the HTML file and set <code>SUPABASE_URL</code> and <code>SUPABASE_KEY</code> at the top of the &lt;script&gt; block.</div>';
@@ -1052,22 +1199,54 @@ async function loadBids() {
 
   if (error) {
     console.error('Supabase error:', error);
-    if (loadEl) { loadEl.hidden = false; loadEl.innerHTML = '<div style="color:var(--red)">Failed to load bids: ' + error.message + '</div>'; }
+    if (loadEl) { loadEl.hidden = false; loadEl.innerHTML = '<div style="color:var(--red)">Failed to load bids: ' + esc(error.message) + '</div>'; }
     return;
   }
 
-  bids = data || [];
+  bids = (data || []).map(normalizeBid);
   render();
   updateKPIs();
   refreshAnchors();
 }
 
+// Re-fetch so changes made by other people show up. Skipped while a drawer/form is
+// open or a save is in flight (so nothing under the user's hands gets replaced).
+function isBusy() {
+  return pendingSaves > 0 || overlay.classList.contains('open') || formOverlay.classList.contains('open');
+}
+
+async function refreshBids() {
+  if (!sb) return;
+  if (isBusy()) { refreshPending = true; return; }
+  refreshPending = false;
+  const { data, error } = await sb.from('bids').select('*').order('created_at');
+  if (error || !data) return;                       // keep showing what we have
+  if (isBusy()) { refreshPending = true; return; }  // something opened during the fetch
+  bids = data.map(normalizeBid);
+  render(); updateKPIs(); refreshAnchors();
+}
+
+function startLiveUpdates() {
+  if (!sb) return;
+  setInterval(refreshBids, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshBids(); });
+  // Instant updates — only fires once `bids` is added to the supabase_realtime publication;
+  // until then the poll above covers it.
+  try {
+    let timer;
+    sb.channel('bids-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bids' },
+          () => { clearTimeout(timer); timer = setTimeout(refreshBids, 500); })
+      .subscribe();
+  } catch (e) { console.warn('Realtime unavailable:', e); }
+}
+
 function refreshAnchors() {
   // Build unique anchor list from all bids
   const known = new Set(['Esther', 'Rahama', 'Samuel']);
-  bids.forEach(b => { if (b.anchor && b.anchor !== '—' && b.anchor !== '-') known.add(b.anchor); });
+  bids.forEach(b => { if (b.anchor && b.anchor !== '—') known.add(b.anchor); });
 
-  // Update filter bar select (keep current selection)
+  // Update filter bar select (keep current selection if it still exists)
   const sel = document.getElementById('anchor-select');
   const prev = sel.value;
   sel.innerHTML = '<option value="all">All Anchors</option>';
@@ -1076,7 +1255,8 @@ function refreshAnchors() {
     o.value = a; o.textContent = a;
     sel.appendChild(o);
   });
-  if (prev) sel.value = prev;
+  sel.value = (prev === 'all' || known.has(prev)) ? prev : 'all';
+  if (currentAnchor !== sel.value) { currentAnchor = sel.value; render(); }
 
   // Update datalist in the form
   const dl = document.getElementById('anchor-list');
@@ -1092,12 +1272,13 @@ function refreshAnchors() {
 
 // ── TOAST ──────────────────────────────────────────────────────────────
 let toastTimer;
-function showToast(msg) {
+function showToast(msg, isError = false) {
   const t = document.getElementById('saving-toast');
   t.textContent = msg;
+  t.classList.toggle('error', isError);
   t.classList.add('visible');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('visible'), 2000);
+  toastTimer = setTimeout(() => t.classList.remove('visible'), isError ? 6000 : 2000);
 }
 
 // ── DATE ───────────────────────────────────────────────────────────────
@@ -1105,7 +1286,7 @@ const d = new Date();
 document.getElementById('today-date').textContent =
   d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
-loadBids();
+loadBids().then(startLiveUpdates);
 </script>
 
 </body></html>
