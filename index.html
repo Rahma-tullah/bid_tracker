@@ -421,6 +421,22 @@ svg.ring { transform: rotate(-90deg); }
 .btn-edit { flex: 1; min-width: 120px; padding: 10px 16px; border-radius: 8px; font-size: .82rem; font-weight: 600; background: var(--g100); color: var(--g900); }
 .btn-edit:hover { background: var(--g200); }
 .saving-toast.error { background: var(--red); }
+
+/* MISSED STATUS */
+.chip-missed { background: var(--red-bg); color: var(--red); }
+.card.missed { border-left-color: var(--red); }
+.ring-fill.red { stroke: var(--red); }
+.btn-missed { flex: 1; min-width: 120px; padding: 10px 16px; border-radius: 8px; font-size: .82rem; font-weight: 600; background: var(--red-bg); color: var(--red); transition: opacity .15s; }
+.btn-missed:hover { opacity: .8; }
+
+/* OVERVIEW */
+.card-overview { padding: 0 18px 14px; display: flex; flex-direction: column; gap: 4px; }
+.ov-scope { font-size: .78rem; color: var(--fg-2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ov-cap { font-size: .7rem; color: var(--fg-muted); }
+.d-overview { background: var(--g50); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; display: grid; gap: 10px; }
+.ov-val { font-size: .82rem; color: var(--fg-2); line-height: 1.5; margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ov-list { margin: 2px 0 0; padding-left: 18px; font-size: .82rem; color: var(--fg-2); line-height: 1.5; overflow-wrap: anywhere; }
+.ov-empty { font-size: .78rem; color: var(--fg-muted); }
 </style>
 </head><body>
 
@@ -466,6 +482,7 @@ svg.ring { transform: rotate(-90deg); }
     <button class="tab active" data-filter="all">All Bids</button>
     <button class="tab" data-filter="submitted">Submitted</button>
     <button class="tab" data-filter="inprog">In Progress</button>
+    <button class="tab" data-filter="missed">Missed</button>
     <div class="f-spacer"></div>
     <button class="add-bid-btn" id="open-form-btn">+ New Bid</button>
     <select class="anchor-select" id="anchor-select"><option value="all">All Anchors</option></select>
@@ -523,6 +540,22 @@ svg.ring { transform: rotate(-90deg); }
             <option value="Rahama">Rahama</option>
             <option value="Samuel">Samuel</option>
           </datalist>
+        </div>
+        <div class="form-field full">
+          <label class="form-label" for="f-scope">Overview — Scope of Work</label>
+          <textarea class="form-textarea" id="f-scope" placeholder="What is this bid about?"></textarea>
+        </div>
+        <div class="form-field full">
+          <label class="form-label" for="f-capacity">Overview — Capacity</label>
+          <input class="form-input" id="f-capacity" type="text" placeholder="e.g. 650kWp, 500kW, 132/33kV">
+        </div>
+        <div class="form-field full">
+          <label class="form-label" for="f-requirements">Overview — Key Requirements / Documents</label>
+          <textarea class="form-textarea" id="f-requirements" placeholder="One per line"></textarea>
+        </div>
+        <div class="form-field full">
+          <label class="form-label" for="f-other">Overview — Other Information</label>
+          <textarea class="form-textarea" id="f-other" placeholder="Anything else worth knowing at a glance"></textarea>
         </div>
         <div class="form-field full">
           <label class="form-label" for="f-comments">Comments / Notes</label>
@@ -616,6 +649,8 @@ function normalizeBid(b) {
     pct: Number(b.pct) || 0,
     comments: b.comments || '',
     internal_deadline: b.internal_deadline || null,
+    missed: !!b.missed,
+    overview: { scope: '', capacity: '', requirements: '', other: '', ...(b.overview || {}) },
   };
 }
 
@@ -625,13 +660,13 @@ function computePct(sections) {
   return items.length ? items.filter(i => i.status === 'Available').length / items.length : 0;
 }
 
-function ring(pct, submitted) {
+function ring(pct, submitted, missed) {
   const fill = Math.round(pct * CIRC);
-  const amber = !submitted && pct < 0.9;
+  const amber = !submitted && !missed && pct < 0.9;
   return `
     <svg class="ring" width="62" height="62" viewBox="0 0 62 62">
       <circle class="ring-track" cx="31" cy="31" r="26"/>
-      <circle class="ring-fill${amber?' amber':''}" cx="31" cy="31" r="26"
+      <circle class="ring-fill${amber?' amber':''}${missed?' red':''}" cx="31" cy="31" r="26"
         stroke-dasharray="${fill} ${CIRC}"/>
     </svg>`;
 }
@@ -656,27 +691,56 @@ function deadlineClass(d, submitted) {
   return (dt - today) / 86400000 <= 14 ? 'soon' : '';
 }
 
+// Short overview shown on the card (full overview is in the drawer). Omitted when nothing is filled in.
+function cardOverview(b) {
+  const o = b.overview;
+  if (!o.scope && !o.capacity) return '';
+  return `<div class="card-overview">
+        ${o.scope ? `<div class="ov-scope">${esc(o.scope)}</div>` : ''}
+        ${o.capacity ? `<div class="ov-cap">Capacity: ${esc(o.capacity)}</div>` : ''}
+      </div>`;
+}
+
+function drawerOverview(b) {
+  const o = b.overview;
+  const row = (label, val) => `<div><span class="dl-label">${label}</span><div class="ov-val">${esc(val)}</div></div>`;
+  const reqs = o.requirements.split('\n').map(r => r.trim()).filter(Boolean);
+  let html = `<div class="d-overview">
+    <div class="dl-label">Overview</div>
+    ${row('Bid / Project', b.name)}`;
+  if (o.scope)    html += row('Scope of work', o.scope);
+  if (o.capacity) html += row('Capacity', o.capacity);
+  if (reqs.length) html += `<div><span class="dl-label">Key requirements</span><ul class="ov-list">${reqs.map(r => `<li>${esc(r)}</li>`).join('')}</ul></div>`;
+  if (o.other)    html += row('Other information', o.other);
+  if (!o.scope && !o.capacity && !reqs.length && !o.other) {
+    html += `<div class="ov-empty">No overview yet — use ✎ Edit Details to add one.</div>`;
+  }
+  return html + `</div>`;
+}
+
 function buildCard(b) {
   const sub = b.submitted;
-  const pctLabel = sub ? '✓' : Math.round(b.pct * 100) + '%';
-  const statusChip = sub
+  const pctLabel = b.missed ? '✕' : sub ? '✓' : Math.round(b.pct * 100) + '%';
+  const statusChip = b.missed
+    ? `<span class="chip chip-missed">✕ Missed</span>`
+    : sub
     ? `<span class="chip chip-sub">✓ Submitted</span>`
     : `<span class="chip chip-prog">⏳ In Progress</span>`;
   const modeIcon = b.mode === 'Online' ? '🌐' : '📦';
   const anch = b.anchor !== '—' ? `<span class="chip chip-anch">👤 ${esc(b.anchor)}</span>` : '';
-  const dlClass = deadlineClass(b.deadline, sub);
+  const dlClass = deadlineClass(b.deadline, sub || b.missed);
   const internal = b.internal_deadline
     ? `<span class="dl-internal">Internal: ${esc(fmtDate(b.internal_deadline))}</span>` : '';
 
   return `
-    <div class="card ${sub ? '' : 'inprog'}" data-id="${esc(b.id)}" data-sub="${sub}" data-anchor="${esc(b.anchor)}">
+    <div class="card ${b.missed ? 'missed' : sub ? '' : 'inprog'}" data-id="${esc(b.id)}" data-sub="${sub}" data-anchor="${esc(b.anchor)}">
       <div class="card-top">
         <div class="card-info">
           <div class="card-name">${esc(b.name)}</div>
           <div class="card-client">${esc(b.client)}</div>
         </div>
         <div class="ring-wrap">
-          ${ring(b.pct, b.submitted)}
+          ${ring(b.pct, b.submitted, b.missed)}
           <div class="ring-pct">${pctLabel}</div>
         </div>
       </div>
@@ -685,6 +749,7 @@ function buildCard(b) {
         <span class="chip chip-mode">${modeIcon} ${esc(b.mode)}</span>
         ${anch}
       </div>
+      ${cardOverview(b)}
       <div class="card-foot">
         <div class="deadline">
           <span class="dl-label">Deadline</span>
@@ -704,7 +769,7 @@ function buildDrawer(b) {
   document.getElementById('d-title').textContent = b.name;
   document.getElementById('d-sub').textContent = b.client;
 
-  let html = `<div class="d-meta">
+  let html = drawerOverview(b) + `<div class="d-meta">
     <div><span class="dl-label">Deadline</span><div class="dl-date">${esc(fmtDate(b.deadline))}</div></div>
     <div><span class="dl-label">Internal deadline</span><div class="dl-date">${b.internal_deadline ? esc(fmtDate(b.internal_deadline)) : '—'}</div></div>
     <div><span class="dl-label">Anchor</span><div class="dl-date">${esc(b.anchor)}</div></div>
@@ -746,9 +811,10 @@ function buildDrawer(b) {
   if (sb) {
     html += `<div class="drawer-actions">
       <button class="btn-edit" data-act="edit">✎ Edit Details</button>
-      ${b.submitted
-        ? `<button class="btn-unsubmit" data-act="revert">↩ Revert to In Progress</button>`
-        : `<button class="btn-submitted" data-act="submit">✓ Mark as Submitted</button>`}
+      ${b.submitted || b.missed ? '' : `<button class="btn-submitted" data-act="submit">✓ Mark as Submitted</button>
+      <button class="btn-missed" data-act="missed">✕ Mark as Missed</button>`}
+      ${b.missed ? `<button class="btn-submitted" data-act="submit">✓ Mark as Submitted</button>` : ''}
+      ${b.submitted || b.missed ? `<button class="btn-unsubmit" data-act="revert">↩ Revert to In Progress</button>` : ''}
       <button class="btn-delete-bid" data-act="delete">🗑 Delete Bid</button>
     </div>`;
   }
@@ -778,13 +844,16 @@ async function commitSections(b, mutate) {
   }
 }
 
-async function setSubmitted(b, value) {
-  const pct = value ? 1 : computePct(b.sections);   // reverting restores the real completion
+// status: 'submitted' | 'missed' | 'inprog'  (the three are mutually exclusive)
+async function setStatus(b, status) {
+  const submitted = status === 'submitted';
+  const missed = status === 'missed';
+  const pct = submitted ? 1 : computePct(b.sections);   // missed/reverting keeps the real completion
   const { ok } = await save(
-    sb.from('bids').update({ submitted: value, pct }).eq('id', b.id).select('id'),
-    value ? 'Marked submitted ✓' : 'Reverted ✓');
+    sb.from('bids').update({ submitted, missed, pct }).eq('id', b.id).select('id'),
+    submitted ? 'Marked submitted ✓' : missed ? 'Marked missed ✓' : 'Reverted ✓');
   if (!ok) return;
-  b.submitted = value; b.pct = pct;
+  b.submitted = submitted; b.missed = missed; b.pct = pct;
   closeDrawer(); render(); updateKPIs();
 }
 
@@ -834,8 +903,9 @@ document.getElementById('d-body').addEventListener('click', e => {
       break;
     }
     case 'edit':   openForm(b); break;
-    case 'submit': setSubmitted(b, true); break;
-    case 'revert': setSubmitted(b, false); break;
+    case 'submit': setStatus(b, 'submitted'); break;
+    case 'missed': setStatus(b, 'missed'); break;
+    case 'revert': setStatus(b, 'inprog'); break;
     case 'delete': deleteBid(b); break;
   }
 });
@@ -855,7 +925,8 @@ let currentAnchor = 'all';
 function render() {
   let visible = bids.filter(b => {
     if (currentFilter === 'submitted' && !b.submitted) return false;
-    if (currentFilter === 'inprog' && b.submitted) return false;
+    if (currentFilter === 'inprog' && (b.submitted || b.missed)) return false;
+    if (currentFilter === 'missed' && !b.missed) return false;
     if (currentAnchor !== 'all' && b.anchor !== currentAnchor) return false;
     return true;
   });
@@ -948,6 +1019,10 @@ function openForm(bid = null) {
     document.getElementById('f-mode').value      = bid.mode;
     document.getElementById('f-anchor').value    = bid.anchor === '—' ? '' : bid.anchor;
     document.getElementById('f-comments').value  = bid.comments;
+    document.getElementById('f-scope').value        = bid.overview.scope;
+    document.getElementById('f-capacity').value     = bid.overview.capacity;
+    document.getElementById('f-requirements').value = bid.overview.requirements;
+    document.getElementById('f-other').value        = bid.overview.other;
   } else {
     addDocRow();
   }
@@ -1108,6 +1183,12 @@ document.getElementById('new-bid-form').addEventListener('submit', async e => {
     anchor:            normalizeAnchor(document.getElementById('f-anchor').value),
     mode:              document.getElementById('f-mode').value,
     comments:          document.getElementById('f-comments').value.trim(),
+    overview: {
+      scope:        document.getElementById('f-scope').value.trim(),
+      capacity:     document.getElementById('f-capacity').value.trim(),
+      requirements: document.getElementById('f-requirements').value.trim(),
+      other:        document.getElementById('f-other').value.trim(),
+    },
   };
 
   const saveBtn = document.getElementById('save-btn');
@@ -1134,10 +1215,10 @@ document.getElementById('new-bid-form').addEventListener('submit', async e => {
       : { 'Documents': [{ doc: 'To be defined', dept: 'BD', status: 'Pending' }] };
 
     const { ok, data } = await save(
-      sb.from('bids').insert([{ ...details, pct: computePct(sections), submitted: false, sections }]).select().single(),
+      sb.from('bids').insert([{ ...details, pct: computePct(sections), submitted: false, missed: false, sections }]).select().single(),
       'Bid added ✓');
     if (!ok) return;          // keep the form open so nothing typed is lost
-    bids.push(normalizeBid(data));
+    bids.unshift(normalizeBid(data));   // newest first
     closeForm();
     refreshAnchors();
     currentFilter = 'all';
@@ -1152,13 +1233,15 @@ document.getElementById('new-bid-form').addEventListener('submit', async e => {
 function updateKPIs() {
   const total     = bids.length;
   const submitted = bids.filter(b => b.submitted).length;
-  const inprog    = total - submitted;
+  const missed    = bids.filter(b => b.missed).length;
+  const inprog    = total - submitted - missed;
   const avg       = total ? Math.round(bids.reduce((s, b) => s + b.pct, 0) / total * 100) : 0;
   const nums = document.querySelectorAll('.kpi-num');
   nums[0].textContent = total;
   nums[1].textContent = submitted;
   nums[2].textContent = inprog;
   nums[3].textContent = avg + '%';
+  document.querySelector('.kpi-sub').textContent = missed ? `Active submissions · ${missed} missed` : 'Active submissions';
 }
 
 // ── SUPABASE LOAD / SAVE ──────────────────────────────────────────────
@@ -1193,7 +1276,7 @@ async function loadBids() {
     return;
   }
 
-  const { data, error } = await sb.from('bids').select('*').order('created_at');
+  const { data, error } = await sb.from('bids').select('*').order('created_at', { ascending: false });
   if (loadEl) loadEl.hidden = true;
   if (gridEl) gridEl.hidden = false;
 
@@ -1219,7 +1302,7 @@ async function refreshBids() {
   if (!sb) return;
   if (isBusy()) { refreshPending = true; return; }
   refreshPending = false;
-  const { data, error } = await sb.from('bids').select('*').order('created_at');
+  const { data, error } = await sb.from('bids').select('*').order('created_at', { ascending: false });
   if (error || !data) return;                       // keep showing what we have
   if (isBusy()) { refreshPending = true; return; }  // something opened during the fetch
   bids = data.map(normalizeBid);
