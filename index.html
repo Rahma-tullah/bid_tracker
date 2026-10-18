@@ -1703,10 +1703,15 @@ function startLiveUpdates() {
   } catch (e) { console.warn('Realtime unavailable:', e); }
 }
 
+// People who have left: their name stays on past bids as a record, but they are no longer offered as an anchor.
+const FORMER_ANCHORS = ['sakeenah'];
+
 function refreshAnchors() {
-  // Build unique anchor list from all bids
+  // Build unique anchor list from all bids (current anchors only)
   const known = new Set(['Esther', 'Rahama', 'Samuel']);
-  bids.forEach(b => { if (b.anchor && b.anchor !== '—') known.add(b.anchor); });
+  bids.forEach(b => {
+    if (b.anchor && b.anchor !== '—' && !FORMER_ANCHORS.includes(b.anchor.trim().toLowerCase())) known.add(b.anchor);
+  });
 
   // Update filter bar select (keep current selection if it still exists)
   const sel = document.getElementById('anchor-select');
