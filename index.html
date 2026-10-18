@@ -150,7 +150,9 @@ nav {
   box-shadow: var(--shadow); transition: box-shadow .2s;
   overflow: hidden;
 }
+.card { cursor: pointer; }
 .card:hover { box-shadow: 0 6px 24px rgba(0,0,0,.1); }
+.card:focus-visible { outline: 2px solid var(--g500); outline-offset: 2px; }
 .card.inprog { border-left-color: var(--amber); }
 
 .card-top { padding: 18px 18px 14px; display: flex; gap: 14px; align-items: flex-start; }
@@ -441,6 +443,10 @@ svg.ring { transform: rotate(-90deg); }
 .btn-edit:hover { background: var(--g200); }
 .saving-toast.error { background: var(--red); }
 
+/* DRAWER: checklist summary line in the details view */
+.d-checklist { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 10px; }
+.d-checklist .dl-date { margin-top: 2px; }
+
 /* MISSED STATUS */
 .chip-missed { background: var(--red-bg); color: var(--red); }
 .card.missed { border-left-color: var(--red); }
@@ -724,7 +730,8 @@ try {
 } catch(e) { console.error('Supabase init failed:', e); }
 
 let bids = [];
-let openBidId = null;     // bid currently shown in the checklist drawer
+let openBidId = null;     // bid currently shown in the drawer
+let drawerMode = 'details'; // 'details' = full bid details, 'checklist' = checklist only
 let editingId = null;     // bid currently being edited in the form (null = new bid)
 let pendingSaves = 0;
 let refreshPending = false;
@@ -838,7 +845,7 @@ function buildCard(b) {
     ? `<span class="dl-internal">Internal: ${esc(fmtDate(b.internal_deadline))}</span>` : '';
 
   return `
-    <div class="card ${b.missed ? 'missed' : sub ? '' : 'inprog'}" data-id="${esc(b.id)}" data-sub="${sub}" data-anchor="${esc(b.anchor)}">
+    <div class="card ${b.missed ? 'missed' : sub ? '' : 'inprog'}" tabindex="0" data-id="${esc(b.id)}" data-sub="${sub}" data-anchor="${esc(b.anchor)}">
       <div class="card-top">
         <div class="card-info">
           <div class="card-name">${esc(b.name)}</div>
@@ -868,24 +875,11 @@ function buildCard(b) {
 }
 
 // ── CHECKLIST DRAWER ───────────────────────────────────────────────────
-function buildDrawer(b) {
-  openBidId = b.id;
-  document.getElementById('d-title').textContent = b.name;
-  document.getElementById('d-sub').textContent = b.client;
-
-  let html = drawerOverview(b) + `<div class="d-meta">
-    <div><span class="dl-label">Deadline</span><div class="dl-date">${esc(fmtDate(b.deadline))}</div></div>
-    <div><span class="dl-label">Internal deadline</span><div class="dl-date">${b.internal_deadline ? esc(fmtDate(b.internal_deadline)) : '—'}</div></div>
-    <div><span class="dl-label">Anchor</span><div class="dl-date">${esc(b.anchor)}</div></div>
-    <div><span class="dl-label">Mode</span><div class="dl-date">${esc(b.mode)}</div></div>
-  </div>`;
-  if (b.missed) {
-    html += `<div class="d-notes d-missed"><div class="dl-label">Reason for missing the bid</div><p>${b.missed_reason ? esc(b.missed_reason) : 'No reason recorded — use ✎ Edit Details to add one.'}</p></div>`;
-  }
-  if (b.comments) {
-    html += `<div class="d-notes"><div class="dl-label">Notes</div><p>${esc(b.comments)}</p></div>`;
-  }
-
+// One drawer, two views:
+//   'details'   -> overview, deadlines, status, missed reason, notes, checklist summary and the bid actions
+//   'checklist' -> only the document checklist (check/uncheck, add/remove), plus a Close button
+function checklistHtml(b) {
+  let html = '';
   for (const [section, items] of Object.entries(b.sections)) {
     const counted = items.filter(i => i.status !== 'N/A');
     const ok = counted.filter(i => i.status === 'Available').length;
@@ -915,6 +909,29 @@ function buildDrawer(b) {
     <input class="form-input" id="new-section-name" type="text" placeholder="New section name…">
     <button type="button" class="btn-add-item" data-act="add-section">+ Add section</button>
   </div>`;
+  return html;
+}
+
+function detailsHtml(b) {
+  let html = drawerOverview(b) + `<div class="d-meta">
+    <div><span class="dl-label">Deadline</span><div class="dl-date">${esc(fmtDate(b.deadline))}</div></div>
+    <div><span class="dl-label">Internal deadline</span><div class="dl-date">${b.internal_deadline ? esc(fmtDate(b.internal_deadline)) : '—'}</div></div>
+    <div><span class="dl-label">Anchor</span><div class="dl-date">${esc(b.anchor)}</div></div>
+    <div><span class="dl-label">Mode</span><div class="dl-date">${esc(b.mode)}</div></div>
+  </div>`;
+  if (b.missed) {
+    html += `<div class="d-notes d-missed"><div class="dl-label">Reason for missing the bid</div><p>${b.missed_reason ? esc(b.missed_reason) : 'No reason recorded — use ✎ Edit Details to add one.'}</p></div>`;
+  }
+  if (b.comments) {
+    html += `<div class="d-notes"><div class="dl-label">Notes</div><p>${esc(b.comments)}</p></div>`;
+  }
+
+  const counted = Object.values(b.sections).flat().filter(i => i.status !== 'N/A');
+  const ok = counted.filter(i => i.status === 'Available').length;
+  html += `<div class="d-checklist">
+    <div><span class="dl-label">Checklist</span><div class="dl-date">${ok}/${counted.length} documents ready</div></div>
+    <button type="button" class="view-btn" data-act="open-checklist">View Checklist →</button>
+  </div>`;
 
   // Action buttons
   if (sb) {
@@ -928,7 +945,23 @@ function buildDrawer(b) {
       <button class="btn-delete-bid" data-act="delete">🗑 Delete Bid</button>
     </div>`;
   }
-  document.getElementById('d-body').innerHTML = html;
+  return html;
+}
+
+function buildDrawer(b, mode = drawerMode) {
+  openBidId = b.id;
+  drawerMode = mode;
+  document.getElementById('d-title').textContent = b.name;
+  document.getElementById('d-sub').textContent = mode === 'checklist' ? b.client + ' · Checklist' : b.client;
+  document.getElementById('d-body').innerHTML = mode === 'checklist'
+    ? checklistHtml(b) + `<div class="drawer-actions"><button type="button" class="btn-unsubmit" data-act="close">Close checklist</button></div>`
+    : detailsHtml(b);
+}
+
+function openDrawer(b, mode) {
+  buildDrawer(b, mode);
+  document.getElementById('drawer').scrollTop = 0;
+  overlay.classList.add('open');
 }
 
 function refreshDrawer(b) {
@@ -1017,6 +1050,8 @@ document.getElementById('d-body').addEventListener('click', e => {
       commitSections(b, s => { s[name] = []; });
       break;
     }
+    case 'open-checklist': buildDrawer(b, 'checklist'); document.getElementById('drawer').scrollTop = 0; break;
+    case 'close':  closeDrawer(); break;
     case 'edit':   openForm(b); break;
     case 'remind': openRemindModal(b); break;
     case 'submit': setStatus(b, 'submitted'); break;
@@ -1051,11 +1086,26 @@ function render() {
   document.getElementById('empty').hidden = visible.length > 0;
 }
 
+// Clicking the card opens the full details; the "View Checklist" button opens only the checklist.
+// Any other control inside a card does nothing here, so it can never open the details by accident.
 grid.addEventListener('click', e => {
-  const btn = e.target.closest('.view-btn');
-  if (!btn) return;
-  const b = bids.find(x => x.id === btn.dataset.id);
-  if (b) { buildDrawer(b); overlay.classList.add('open'); }
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const b = bids.find(x => x.id === card.dataset.id);
+  if (!b) return;
+  const control = e.target.closest('button, a, input, select, textarea, label');
+  if (control) {
+    if (control.classList.contains('view-btn')) openDrawer(b, 'checklist');
+    return;
+  }
+  if (String(window.getSelection && window.getSelection()).trim()) return;   // user is selecting text, not opening
+  openDrawer(b, 'details');
+});
+grid.addEventListener('keydown', e => {
+  if ((e.key !== 'Enter' && e.key !== ' ') || !e.target.classList.contains('card')) return;
+  e.preventDefault();
+  const b = bids.find(x => x.id === e.target.dataset.id);
+  if (b) openDrawer(b, 'details');
 });
 
 // Tabs
