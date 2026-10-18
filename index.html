@@ -207,13 +207,13 @@ svg.ring { transform: rotate(-90deg); }
 /* MODAL */
 .overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 300;
-  display: flex; align-items: flex-end; justify-content: center;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
   opacity: 0; pointer-events: none; transition: opacity .2s;
 }
 .overlay.open { opacity: 1; pointer-events: all; }
 .drawer {
-  background: var(--surface); border-radius: 20px 20px 0 0; width: 100%; max-width: 680px;
-  max-height: 80vh; overflow-y: auto; padding: 28px 24px 40px;
+  background: var(--surface); border-radius: 20px; width: 100%; max-width: 680px;
+  max-height: 88vh; overflow-y: auto; padding: 28px 24px 40px;
   transform: translateY(30px); transition: transform .25s;
 }
 .overlay.open .drawer { transform: translateY(0); }
@@ -246,12 +246,12 @@ svg.ring { transform: rotate(-90deg); }
 /* ADD BID FORM */
 .form-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 400;
-  display: flex; align-items: flex-end; justify-content: center;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
   opacity: 0; pointer-events: none; transition: opacity .2s;
 }
 .form-overlay.open { opacity: 1; pointer-events: all; }
 .form-drawer {
-  background: var(--surface); border-radius: 20px 20px 0 0;
+  background: var(--surface); border-radius: 20px;
   width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto;
   padding: 28px 24px 40px;
   transform: translateY(30px); transition: transform .25s;
@@ -477,7 +477,7 @@ svg.ring { transform: rotate(-90deg); }
 /* MISSED REASON */
 .missed-reason { padding: 0 18px 12px; font-size: .72rem; line-height: 1.4; color: var(--red); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .d-missed { background: var(--red-bg); border-color: var(--red); }
-.missed-drawer { max-width: 440px; border-radius: 16px; margin-bottom: 24px; }
+.missed-drawer { max-width: 440px; }
 .missed-hint { font-size: .8rem; color: var(--fg-muted); margin-bottom: 16px; line-height: 1.5; }
 .reason-err { font-size: .75rem; font-weight: 600; color: var(--red); margin-top: 6px; }
 .reason-other { margin-top: 8px; }
