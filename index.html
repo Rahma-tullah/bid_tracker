@@ -1235,7 +1235,7 @@ document.getElementById('missed-confirm').addEventListener('click', async () => 
 });
 
 // ── MANUAL REMINDER ────────────────────────────────────────────────────
-// Sends through the `manual-reminder` Edge Function (Gmail SMTP credentials live in Supabase secrets, never here).
+// Sends through the `manual-reminder` Edge Function (SMTP credentials live in Supabase secrets, never here).
 // The PIN is checked on the server. Only ever sent when the user clicks Send.
 const remindOverlay = document.getElementById('remind-overlay');
 const rmStatus = document.getElementById('rm-status');

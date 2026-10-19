@@ -27,6 +27,24 @@ const addDays = (iso: string, n: number) => new Date(utcMs(iso) + n * 86400000).
 const longDate = (iso: string) =>
   new Date(utcMs(iso)).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
+// SMTP settings come from Supabase secrets (never from the code or the website):
+//   required: SMTP_HOST, SMTP_USER, SMTP_PASSWORD
+//   optional: SMTP_PORT (default 465, TLS from the start), SMTP_FROM_NAME (default "Bid Tracker Reminder"),
+//             SMTP_FROM_EMAIL (default: SMTP_USER)
+function smtpConfig() {
+  const host = Deno.env.get("SMTP_HOST")?.trim();
+  const user = Deno.env.get("SMTP_USER")?.trim();
+  const pass = Deno.env.get("SMTP_PASSWORD");
+  if (!host || !user || !pass) return null;
+  const port = Number(Deno.env.get("SMTP_PORT")) || 465;
+  const fromName = (Deno.env.get("SMTP_FROM_NAME") || "Bid Tracker Reminder").replace(/["\r\n<>]/g, "");
+  const fromEmail = Deno.env.get("SMTP_FROM_EMAIL")?.trim() || user;
+  return {
+    from: `"${fromName}" <${fromEmail}>`,
+    transport: { host, port, secure: port === 465, auth: { user, pass }, connectionTimeout: 15000, socketTimeout: 20000 },
+  };
+}
+
 const isUnassigned = (a: string | null) => !a || ["", "-", "—"].includes(a.trim());
 
 function buildEmail(bid: { name: string; client: string | null; anchor: string | null; internal_deadline: string; deadline: string },
@@ -88,14 +106,11 @@ Deno.serve(async (req: Request) => {
   const due = (bids ?? []).filter((b) => DATE_RE.test(b.deadline ?? "") && b.deadline >= today);
   summary.due = due.length;
 
-  const user = Deno.env.get("GMAIL_USER");
-  const pass = Deno.env.get("GMAIL_APP_PASSWORD");
-  if (!dry && due.length && (!user || !pass)) {
-    return json({ ...summary, error: "Gmail SMTP secrets are not configured." }, 503);
+  const smtp = smtpConfig();
+  if (!dry && due.length && !smtp) {
+    return json({ ...summary, error: "SMTP settings are not configured (SMTP_HOST, SMTP_USER, SMTP_PASSWORD)." }, 503);
   }
-  const transporter = !dry && user && pass
-    ? nodemailer.createTransport({ host: "smtp.gmail.com", port: 465, secure: true, auth: { user, pass }, connectionTimeout: 15000, socketTimeout: 20000 })
-    : null;
+  const transporter = !dry && smtp ? nodemailer.createTransport(smtp.transport) : null;
 
   for (const bid of due) {
     const to = isUnassigned(bid.anchor) ? fallbackEmail : emailByAnchor.get(bid.anchor.trim().toLowerCase());
@@ -153,7 +168,7 @@ Deno.serve(async (req: Request) => {
 
     try {
       await transporter!.sendMail({
-        from: `"Prado Power Bid Tracker" <${user}>`,
+        from: smtp!.from,
         to,
         cc: recipients.length > 1 ? ccEmail! : undefined,
         subject,

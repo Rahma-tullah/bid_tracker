@@ -1,6 +1,6 @@
 // Manual reminder emails (sent only when a person clicks "Send Manual Reminder" in the tracker).
-// Independent of the automatic anchor reminders. Gmail SMTP credentials come from Supabase secrets:
-//   GMAIL_USER, GMAIL_APP_PASSWORD, and REMINDER_PIN (the passcode the person types in the tracker).
+// Independent of the automatic anchor reminders. Credentials come from Supabase secrets:
+//   SMTP_HOST, SMTP_USER, SMTP_PASSWORD (see smtpConfig below) and REMINDER_PIN (the passcode typed in the tracker).
 import nodemailer from "npm:nodemailer@6.9.16";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -15,6 +15,24 @@ const json = (body: unknown, status = 200) =>
 const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 const MAX_RECIPIENTS = 20;
 const DAILY_MANUAL_CAP = 50;
+
+// SMTP settings come from Supabase secrets (never from the code or the website):
+//   required: SMTP_HOST, SMTP_USER, SMTP_PASSWORD
+//   optional: SMTP_PORT (default 465, TLS from the start), SMTP_FROM_NAME (default "Bid Tracker Reminder"),
+//             SMTP_FROM_EMAIL (default: SMTP_USER)
+function smtpConfig() {
+  const host = Deno.env.get("SMTP_HOST")?.trim();
+  const user = Deno.env.get("SMTP_USER")?.trim();
+  const pass = Deno.env.get("SMTP_PASSWORD");
+  if (!host || !user || !pass) return null;
+  const port = Number(Deno.env.get("SMTP_PORT")) || 465;
+  const fromName = (Deno.env.get("SMTP_FROM_NAME") || "Bid Tracker Reminder").replace(/["\r\n<>]/g, "");
+  const fromEmail = Deno.env.get("SMTP_FROM_EMAIL")?.trim() || user;
+  return {
+    from: `"${fromName}" <${fromEmail}>`,
+    transport: { host, port, secure: port === 465, auth: { user, pass }, connectionTimeout: 15000, socketTimeout: 20000 },
+  };
+}
 
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -95,20 +113,16 @@ Deno.serve(async (req: Request) => {
     return !logErr;
   };
 
-  const user = Deno.env.get("GMAIL_USER");
-  const pass = Deno.env.get("GMAIL_APP_PASSWORD");
-  if (!user || !pass) {
-    await log("failed", "Gmail SMTP secrets are not configured.");
-    return json({ ok: false, error: "Email is not set up yet: Gmail SMTP secrets are missing in Supabase." }, 503);
+  const smtp = smtpConfig();
+  if (!smtp) {
+    await log("failed", "SMTP settings are not configured.");
+    return json({ ok: false, error: "Email is not set up yet: the SMTP_HOST, SMTP_USER and SMTP_PASSWORD secrets are missing in Supabase." }, 503);
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com", port: 465, secure: true, auth: { user, pass },
-      connectionTimeout: 15000, socketTimeout: 20000,
-    });
+    const transporter = nodemailer.createTransport(smtp.transport);
     await transporter.sendMail({
-      from: `"Prado Power Bid Tracker" <${user}>`,
+      from: smtp.from,
       to: recipients,
       subject,
       text: message,
