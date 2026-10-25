@@ -678,10 +678,6 @@ svg.ring { transform: rotate(-90deg); }
         <label class="form-label" for="rm-message">Message * (review and edit before sending)</label>
         <textarea class="form-textarea" id="rm-message" style="min-height:190px"></textarea>
       </div>
-      <div class="form-field full">
-        <label class="form-label" for="rm-pin">Reminder PIN *</label>
-        <input class="form-input" id="rm-pin" type="password" placeholder="Required to send" autocomplete="off">
-      </div>
     </div>
     <div class="xlsx-status" id="rm-status" hidden style="margin-top:16px"></div>
     <div class="form-actions">
@@ -691,9 +687,9 @@ svg.ring { transform: rotate(-90deg); }
     <div class="rm-history">
       <div class="rm-history-head">
         <span class="dl-label">Reminder history for this bid</span>
-        <button type="button" class="btn-add-item" id="rm-history-btn" style="padding:6px 12px">Load history</button>
+        <button type="button" class="btn-add-item" id="rm-history-btn" style="padding:6px 12px">Refresh</button>
       </div>
-      <div id="rm-history-list"><div class="rm-empty">Enter the PIN and click “Load history” to see manual and automatic reminders for this bid.</div></div>
+      <div id="rm-history-list"><div class="rm-empty">Loading history…</div></div>
     </div>
   </div>
 </div>
@@ -1237,7 +1233,7 @@ document.getElementById('missed-confirm').addEventListener('click', async () => 
 
 // ── MANUAL REMINDER ────────────────────────────────────────────────────
 // Sends through the `manual-reminder` Edge Function (SMTP credentials live in Supabase secrets, never here).
-// The PIN is checked on the server. Only ever sent when the user clicks Send.
+// Only ever sent when the user clicks Send. (No PIN: a login/authorization step is planned.)
 const remindOverlay = document.getElementById('remind-overlay');
 const rmStatus = document.getElementById('rm-status');
 let remindBidId = null;
@@ -1282,13 +1278,11 @@ function openRemindModal(b) {
   document.getElementById('rm-to').value = '';
   document.getElementById('rm-subject').value = d.subject;
   document.getElementById('rm-message').value = d.message;
-  let pin = '';
-  try { pin = sessionStorage.getItem('pp_rpin') || ''; } catch(e) {}
-  document.getElementById('rm-pin').value = pin;
   rmStatus.hidden = true;
-  document.getElementById('rm-history-list').innerHTML = '<div class="rm-empty">Enter the PIN and click “Load history” to see manual and automatic reminders for this bid.</div>';
+  document.getElementById('rm-history-list').innerHTML = '<div class="rm-empty">Loading history…</div>';
   remindOverlay.classList.add('open');
   document.getElementById('rm-to').focus();
+  loadReminderHistory(true);
 }
 function closeRemindModal() {
   remindOverlay.classList.remove('open');
@@ -1296,28 +1290,23 @@ function closeRemindModal() {
   if (refreshPending) refreshBids();
 }
 
-function rememberPin(pin) { try { sessionStorage.setItem('pp_rpin', pin); } catch(e) {} }
-
 async function sendReminder() {
   const bid = bids.find(x => x.id === remindBidId);
   if (!bid) return;
   const recipients = document.getElementById('rm-to').value.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
   const subject = document.getElementById('rm-subject').value.trim();
   const message = document.getElementById('rm-message').value.trim();
-  const pin = document.getElementById('rm-pin').value;
   const badEmail = recipients.find(r => !EMAIL_RE.test(r));
   if (!recipients.length) return showRmStatus('err', 'Enter at least one recipient email address.');
   if (badEmail) return showRmStatus('err', 'This does not look like an email address: ' + badEmail);
   if (!subject || !message) return showRmStatus('err', 'The subject and message cannot be empty.');
-  if (!pin) return showRmStatus('err', 'Enter the reminder PIN.');
 
   const btn = document.getElementById('remind-send');
   btn.disabled = true; btn.textContent = 'Sending…';
   showRmStatus('ok', 'Sending…');
-  const res = await callReminderApi({ bid_id: bid.id, recipients, subject, message, pin });
+  const res = await callReminderApi({ bid_id: bid.id, recipients, subject, message });
   btn.disabled = false; btn.textContent = 'Send Reminder';
   if (res.ok) {
-    rememberPin(pin);
     showRmStatus('ok', '✅ ' + res.message + (res.warning ? ' ' + res.warning : ''));
     showToast('Reminder sent ✓');
   } else {
@@ -1336,11 +1325,12 @@ const RM_STATUS = {
 
 async function loadReminderHistory(quiet = false) {
   const list = document.getElementById('rm-history-list');
-  const pin = document.getElementById('rm-pin').value;
-  if (!pin) { if (!quiet) showRmStatus('err', 'Enter the reminder PIN to load history.'); return; }
-  const res = await callReminderApi({ action: 'history', bid_id: remindBidId, pin });
-  if (!res.ok) { if (!quiet) showRmStatus('err', '⚠️ ' + (res.error || 'Could not load history.')); return; }
-  rememberPin(pin);
+  const res = await callReminderApi({ action: 'history', bid_id: remindBidId });
+  if (!res.ok) {
+    if (!quiet) showRmStatus('err', '⚠️ ' + (res.error || 'Could not load history.'));
+    else list.innerHTML = '<div class="rm-empty">Could not load the history right now. Use Refresh to try again.</div>';
+    return;
+  }
   if (!res.history.length) { list.innerHTML = '<div class="rm-empty">No reminders have been sent for this bid yet.</div>'; return; }
   list.innerHTML = res.history.map(r => {
     const [cls, label] = RM_STATUS[r.status] || ['chip-mode', r.status];

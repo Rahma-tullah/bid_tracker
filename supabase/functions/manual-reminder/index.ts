@@ -1,6 +1,9 @@
 // Manual reminder emails (sent only when a person clicks "Send Manual Reminder" in the tracker).
 // Independent of the automatic anchor reminders. Credentials come from Supabase secrets:
-//   SMTP_HOST, SMTP_USER, SMTP_PASSWORD (see smtpConfig below) and REMINDER_PIN (the passcode typed in the tracker).
+//   SMTP_HOST, SMTP_USER, SMTP_PASSWORD (see smtpConfig below).
+// NOTE: there is no login yet, so this function is open to anyone holding the site's public key.
+// The only guards are the limits below (recipients per email, daily cap, the bid must exist).
+// Authorization and audit logging are planned; add the access check right after the request is parsed.
 import nodemailer from "npm:nodemailer@6.9.16";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -37,28 +40,12 @@ function smtpConfig() {
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
-function safeEqual(a: string, b: string) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   if (req.method !== "POST") return json({ ok: false, error: "Method not allowed." }, 405);
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ ok: false, error: "Invalid request." }, 400); }
-
-  // Anyone can reach this function with the public key, so the PIN is the real gate. Fail closed if it is not set.
-  const expectedPin = Deno.env.get("REMINDER_PIN");
-  if (!expectedPin) {
-    return json({ ok: false, error: "Reminders are not set up yet: the REMINDER_PIN secret is missing in Supabase." }, 503);
-  }
-  if (typeof body.pin !== "string" || !safeEqual(body.pin, expectedPin)) {
-    return json({ ok: false, error: "Incorrect reminder PIN." }, 401);
-  }
 
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
     auth: { persistSession: false },
