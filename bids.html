@@ -443,6 +443,20 @@ svg.ring { transform: rotate(-90deg); }
 .btn-edit:hover { background: var(--g200); }
 .saving-toast.error { background: var(--red); }
 
+/* LISTING ORDER + OUTCOME + PROGRESS REPORTS */
+.grp-label { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-top: 8px; font-family: var(--font-d); font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--fg-muted); }
+.grp-label:first-child { margin-top: 0; }
+.chip-won { background: var(--g700); color: #fff; }
+.chip-new { background: transparent; color: var(--g700); border: 1.5px solid var(--g500); }
+.d-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.d-outcome, .d-reports { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; display: grid; gap: 10px; }
+.d-oc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .75rem; color: var(--fg-muted); }
+.oc-text { font-size: .82rem; color: var(--fg-2); line-height: 1.5; margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rp-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--g50); display: grid; gap: 8px; }
+.rp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .85rem; }
+.rp-head .chip { margin-left: 8px; }
+.rp-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
 /* DRAWER: checklist summary line in the details view */
 .d-checklist { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 10px; }
 .d-checklist .dl-date { margin-top: 2px; }
@@ -456,7 +470,8 @@ svg.ring { transform: rotate(-90deg); }
 
 /* OVERVIEW */
 .card-overview { padding: 0 18px 14px; display: flex; flex-direction: column; gap: 4px; }
-.ov-scope { font-size: .78rem; color: var(--fg-2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ov-scope { font-size: .78rem; color: var(--fg-2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ov-k { color: var(--fg-muted); font-weight: 600; }
 .ov-cap { font-size: .7rem; color: var(--fg-muted); }
 .d-overview { background: var(--g50); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; display: grid; gap: 10px; }
 .ov-val { font-size: .82rem; color: var(--fg-2); line-height: 1.5; margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -582,6 +597,7 @@ svg.ring { transform: rotate(-90deg); }
           <datalist id="anchor-list">
             <option value="—">Unassigned</option>
             <option value="Esther">Esther</option>
+            <option value="Ezekiel">Ezekiel</option>
             <option value="Rahama">Rahama</option>
             <option value="Samuel">Samuel</option>
           </datalist>
@@ -591,20 +607,16 @@ svg.ring { transform: rotate(-90deg); }
           <div id="fr-picker"></div>
         </div>
         <div class="form-field full">
-          <label class="form-label" for="f-scope">Overview — Scope of Work</label>
-          <textarea class="form-textarea" id="f-scope" placeholder="What is this bid about?"></textarea>
+          <label class="form-label" for="f-overview">Overview</label>
+          <textarea class="form-textarea" id="f-overview" placeholder="What is this bid about?"></textarea>
         </div>
         <div class="form-field full">
-          <label class="form-label" for="f-capacity">Overview — Capacity</label>
+          <label class="form-label" for="f-scope">Scope of Work</label>
+          <textarea class="form-textarea" id="f-scope" placeholder="What work does the bid cover?"></textarea>
+        </div>
+        <div class="form-field full">
+          <label class="form-label" for="f-capacity">Capacity</label>
           <input class="form-input" id="f-capacity" type="text" placeholder="e.g. 650kWp, 500kW, 132/33kV">
-        </div>
-        <div class="form-field full">
-          <label class="form-label" for="f-requirements">Overview — Key Requirements / Documents</label>
-          <textarea class="form-textarea" id="f-requirements" placeholder="One per line"></textarea>
-        </div>
-        <div class="form-field full">
-          <label class="form-label" for="f-other">Overview — Other Information</label>
-          <textarea class="form-textarea" id="f-other" placeholder="Anything else worth knowing at a glance"></textarea>
         </div>
         <div class="form-field full">
           <label class="form-label" for="f-comments">Comments / Notes</label>
@@ -654,6 +666,82 @@ svg.ring { transform: rotate(-90deg); }
     <div class="form-actions">
       <button type="button" class="btn-cancel" id="missed-cancel">Cancel</button>
       <button type="button" class="btn-save" id="missed-confirm">Mark as Missed</button>
+    </div>
+  </div>
+</div>
+
+<!-- BID OUTCOME MODAL -->
+<div class="form-overlay" id="outcome-overlay">
+  <div class="form-drawer missed-drawer">
+    <div class="form-head">
+      <div class="form-title">Bid Outcome &amp; Feedback</div>
+      <button class="close-btn" id="outcome-close" aria-label="Close">✕</button>
+    </div>
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <div class="form-field">
+        <label class="form-label" for="oc-outcome">Bid Outcome</label>
+        <select class="form-select" id="oc-outcome"><option>Pending</option><option>Won</option><option>Lost</option></select>
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="oc-feedback">Feedback</label>
+        <textarea class="form-textarea" id="oc-feedback" placeholder="Feedback received from the client / bid issuer…"></textarea>
+      </div>
+      <div class="form-field" id="oc-reason-wrap" hidden>
+        <label class="form-label" for="oc-reason">Reason for Losing</label>
+        <textarea class="form-textarea" id="oc-reason" placeholder="Reason given by the client or bid issuer, where available…"></textarea>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn-cancel" id="outcome-cancel">Cancel</button>
+      <button type="button" class="btn-save" id="outcome-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROGRESS REPORT MODAL -->
+<div class="form-overlay" id="report-overlay">
+  <div class="form-drawer">
+    <div class="form-head">
+      <div class="form-title" id="rp-title">New Progress Report</div>
+      <button class="close-btn" id="report-close" aria-label="Close">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-field">
+        <label class="form-label" for="rp-date">Report Date *</label>
+        <input class="form-input" id="rp-date" type="date">
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="rp-status">Current Project Status</label>
+        <input class="form-input" id="rp-status" type="text" placeholder="e.g. Site mobilisation" autocomplete="off">
+      </div>
+      <div class="form-field full">
+        <label class="form-label" for="rp-update">Progress Update</label>
+        <textarea class="form-textarea" id="rp-update" placeholder="How is the awarded project progressing?"></textarea>
+      </div>
+      <div class="form-field full">
+        <label class="form-label" for="rp-work">Work Completed So Far</label>
+        <textarea class="form-textarea" id="rp-work"></textarea>
+      </div>
+      <div class="form-field full">
+        <label class="form-label" for="rp-challenges">Challenges Encountered</label>
+        <textarea class="form-textarea" id="rp-challenges"></textarea>
+      </div>
+      <div class="form-field full">
+        <label class="form-label" for="rp-delays">Delays, if Any</label>
+        <textarea class="form-textarea" id="rp-delays"></textarea>
+      </div>
+      <div class="form-field full">
+        <label class="form-label" for="rp-delay-reasons">Reasons for the Delays</label>
+        <textarea class="form-textarea" id="rp-delay-reasons"></textarea>
+      </div>
+      <div class="form-field full">
+        <label class="form-label" for="rp-delay-actions">Actions Being Taken to Address the Delays</label>
+        <textarea class="form-textarea" id="rp-delay-actions"></textarea>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn-cancel" id="report-cancel">Cancel</button>
+      <button type="button" class="btn-save" id="report-save">Save Report</button>
     </div>
   </div>
 </div>
@@ -756,7 +844,12 @@ function normalizeBid(b) {
     internal_deadline: b.internal_deadline || null,
     missed: !!b.missed,
     missed_reason: b.missed_reason || '',
-    overview: { scope: '', capacity: '', requirements: '', other: '', ...(b.overview || {}) },
+    // The overview is three fields: Overview (summary), Scope of Work, Capacity. (Older bids kept their summary text under "other".)
+    overview: { summary: (b.overview && (b.overview.summary ?? b.overview.other)) || '', scope: (b.overview && b.overview.scope) || '', capacity: (b.overview && b.overview.capacity) || '' },
+    outcome: ['Pending', 'Won', 'Lost'].includes(b.outcome) ? b.outcome : 'Pending',
+    feedback: b.feedback || '',
+    loss_reason: b.loss_reason || '',
+    submitted_at: b.submitted_at || null,
   };
 }
 
@@ -797,11 +890,12 @@ function deadlineClass(d, submitted) {
   return (dt - today) / 86400000 <= 14 ? 'soon' : '';
 }
 
-// Short overview shown on every card (full overview is in the drawer).
+// Short overview shown on every card: Overview, Scope of Work, Capacity.
 function cardOverview(b) {
   const o = b.overview;
-  const body = (o.scope || o.capacity)
-    ? `${o.scope ? `<div class="ov-scope">${esc(o.scope)}</div>` : ''}
+  const body = (o.summary || o.scope || o.capacity)
+    ? `${o.summary ? `<div class="ov-scope">${esc(o.summary)}</div>` : ''}
+        ${o.scope ? `<div class="ov-scope"><span class="ov-k">Scope:</span> ${esc(o.scope)}</div>` : ''}
         ${o.capacity ? `<div class="ov-cap">Capacity: ${esc(o.capacity)}</div>` : ''}`
     : `<div class="ov-empty">No overview yet — add one via Edit Details.</div>`;
   return `<div class="card-overview">
@@ -813,18 +907,41 @@ function cardOverview(b) {
 function drawerOverview(b) {
   const o = b.overview;
   const row = (label, val) => `<div><span class="dl-label">${label}</span><div class="ov-val">${esc(val)}</div></div>`;
-  const reqs = o.requirements.split('\n').map(r => r.trim()).filter(Boolean);
   let html = `<div class="d-overview">
-    <div class="dl-label">Overview</div>
-    ${row('Bid / Project', b.name)}`;
+    <div class="dl-label">Overview</div>`;
+  if (o.summary)  html += row('Overview', o.summary);
   if (o.scope)    html += row('Scope of work', o.scope);
   if (o.capacity) html += row('Capacity', o.capacity);
-  if (reqs.length) html += `<div><span class="dl-label">Key requirements</span><ul class="ov-list">${reqs.map(r => `<li>${esc(r)}</li>`).join('')}</ul></div>`;
-  if (o.other)    html += row('Other information', o.other);
-  if (!o.scope && !o.capacity && !reqs.length && !o.other) {
+  if (!o.summary && !o.scope && !o.capacity) {
     html += `<div class="ov-empty">No overview yet — use ✎ Edit Details to add one.</div>`;
   }
   return html + `</div>`;
+}
+
+// ── LISTING ORDER ──
+// 1) upcoming deadlines (nearest first)  2) no deadline set  3) deadlines that have passed (most recently passed first)
+const GROUP_LABELS = ['Upcoming deadlines', 'No deadline set', 'Deadline passed'];
+function deadlineGroup(b) {
+  const dt = parseDate(b.deadline);
+  if (!dt) return 1;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return dt >= today ? 0 : 2;
+}
+function sortByDeadline(list) {
+  return [...list].sort((a, b) => {
+    const ga = deadlineGroup(a), gb = deadlineGroup(b);
+    if (ga !== gb) return ga - gb;
+    const da = parseDate(a.deadline), db = parseDate(b.deadline);
+    if (ga === 0 && da - db) return da - db;
+    if (ga === 2 && db - da) return db - da;
+    return String(b.created_at || '').localeCompare(String(a.created_at || ''));   // same date: newest added first
+  });
+}
+// A bid counts as "recently submitted" for 7 days after it was marked Submitted.
+function isRecentlySubmitted(b) {
+  if (!b.submitted || !b.submitted_at) return false;
+  const t = new Date(b.submitted_at).getTime();
+  return !isNaN(t) && Date.now() - t <= 7 * 86400000 && t <= Date.now() + 3600000;
 }
 
 function buildCard(b) {
@@ -855,6 +972,9 @@ function buildCard(b) {
       </div>
       <div class="card-chips">
         ${statusChip}
+        ${isRecentlySubmitted(b) ? '<span class="chip chip-new" title="Marked as submitted in the last 7 days">🆕 Recently submitted</span>' : ''}
+        ${sub && !b.missed && b.outcome === 'Won' ? '<span class="chip chip-won">🏆 Won</span>' : ''}
+        ${sub && !b.missed && b.outcome === 'Lost' ? '<span class="chip chip-missed">✕ Lost</span>' : ''}
         <span class="chip chip-mode">${modeIcon} ${esc(b.mode)}</span>
         ${anch}
       </div>
@@ -909,6 +1029,65 @@ function checklistHtml(b) {
   return html;
 }
 
+// ── OUTCOME & FEEDBACK (after submission) ──
+function outcomeHtml(b) {
+  const chip = b.outcome === 'Won' ? '<span class="chip chip-won">🏆 Won</span>'
+             : b.outcome === 'Lost' ? '<span class="chip chip-missed">✕ Lost</span>'
+             : '<span class="chip chip-prog">⏳ Pending — awaiting decision</span>';
+  const when = b.submitted_at && parseDate(b.submitted_at) ? `<span>Submitted ${esc(fmtDate(b.submitted_at))}</span>` : '';
+  return `<div class="d-outcome">
+    <div class="d-sec-head"><span class="dl-label">Bid outcome &amp; feedback</span><button type="button" class="btn-add-item" data-act="outcome">✎ Update</button></div>
+    <div class="d-oc-row">${chip}${when}</div>
+    ${b.feedback ? `<div><span class="dl-label">Feedback</span><p class="oc-text">${esc(b.feedback)}</p></div>` : '<div class="ov-empty">No feedback recorded yet.</div>'}
+    ${b.outcome === 'Lost' ? `<div><span class="dl-label">Reason for losing</span><p class="oc-text">${b.loss_reason ? esc(b.loss_reason) : '—'}</p></div>` : ''}
+  </div>`;
+}
+
+// ── PROGRESS REPORTS (won bids only) ──
+const reportCache = {};   // bid id -> reports (undefined = not loaded yet, null = failed to load)
+const RP_FIELDS = [['progress_update', 'Progress update'], ['work_completed', 'Work completed so far'], ['challenges', 'Challenges encountered'],
+                   ['delays', 'Delays'], ['delay_reasons', 'Reasons for the delays'], ['delay_actions', 'Actions being taken to address the delays']];
+const sortReports = list => [...list].sort((a, b) => String(b.report_date).localeCompare(String(a.report_date)) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+function reportCardHtml(r) {
+  const rows = RP_FIELDS.filter(([k]) => r[k]).map(([k, label]) => `<div><span class="dl-label">${label}</span><p class="oc-text">${esc(r[k])}</p></div>`).join('');
+  return `<div class="rp-card">
+    <div class="rp-head">
+      <div><strong>${esc(fmtDate(r.report_date))}</strong>${r.current_status ? `<span class="chip chip-anch">${esc(r.current_status)}</span>` : ''}</div>
+      <div class="rp-actions">
+        <button type="button" class="item-remove" data-act="edit-report" data-rid="${esc(r.id)}" title="Edit this report">✎</button>
+        <button type="button" class="item-remove" data-act="delete-report" data-rid="${esc(r.id)}" title="Delete this report">✕</button>
+      </div>
+    </div>
+    ${rows}
+  </div>`;
+}
+function reportsListHtml(bidId) {
+  const list = reportCache[bidId];
+  if (list === undefined) return '<div class="ov-empty">Loading reports…</div>';
+  if (list === null) return '<div class="ov-empty">Could not load the progress reports right now.</div>';
+  if (!list.length) return '<div class="ov-empty">No progress reports yet — add the first one.</div>';
+  return list.map(reportCardHtml).join('');
+}
+function reportsSectionHtml(b) {
+  return `<div class="d-reports">
+    <div class="d-sec-head"><span class="dl-label">Progress reports</span><button type="button" class="btn-add-item" data-act="add-report">+ Add Progress Report</button></div>
+    <div id="d-reports-list" style="display:grid;gap:10px">${reportsListHtml(b.id)}</div>
+  </div>`;
+}
+function renderReportsList(bidId) {
+  const el = document.getElementById('d-reports-list');
+  if (el && openBidId === bidId) el.innerHTML = reportsListHtml(bidId);
+}
+async function loadReports(bidId, force = false) {
+  if (!force && reportCache[bidId] !== undefined) { renderReportsList(bidId); return; }
+  const { data, error } = await sb.from('bid_progress_reports').select('*').eq('bid_id', bidId)
+    .order('report_date', { ascending: false }).order('created_at', { ascending: false });
+  if (error) console.error('Could not load progress reports:', error);
+  reportCache[bidId] = error ? null : sortReports(data || []);
+  renderReportsList(bidId);
+}
+
 function detailsHtml(b) {
   let html = drawerOverview(b) + `<div class="d-meta">
     <div><span class="dl-label">Deadline</span><div class="dl-date">${esc(fmtDate(b.deadline))}</div></div>
@@ -922,6 +1101,9 @@ function detailsHtml(b) {
   if (b.comments) {
     html += `<div class="d-notes"><div class="dl-label">Notes</div><p>${esc(b.comments)}</p></div>`;
   }
+
+  if (b.submitted) html += outcomeHtml(b);                                    // feedback is recorded after submission
+  if (b.submitted && b.outcome === 'Won') html += reportsSectionHtml(b);      // progress reports exist only for won bids
 
   const counted = Object.values(b.sections).flat().filter(i => i.status !== 'N/A');
   const ok = counted.filter(i => i.status === 'Available').length;
@@ -953,6 +1135,7 @@ function buildDrawer(b, mode = drawerMode) {
   document.getElementById('d-body').innerHTML = mode === 'checklist'
     ? checklistHtml(b) + `<div class="drawer-actions"><button type="button" class="btn-unsubmit" data-act="close">Close checklist</button></div>`
     : detailsHtml(b);
+  if (mode === 'details' && b.submitted && b.outcome === 'Won' && sb) loadReports(b.id);
 }
 
 function openDrawer(b, mode) {
@@ -991,10 +1174,10 @@ async function setStatus(b, status, reason = '') {
   const missed = status === 'missed';
   const pct = submitted ? 1 : computePct(b.sections);   // missed/reverting keeps the real completion
   const { ok } = await save(
-    sb.from('bids').update({ submitted, missed, missed_reason: missed ? reason : null, pct }).eq('id', b.id).select('id'),
+    sb.from('bids').update({ submitted, missed, missed_reason: missed ? reason : null, pct, submitted_at: submitted ? new Date().toISOString() : null }).eq('id', b.id).select('id'),
     submitted ? 'Marked submitted ✓' : missed ? 'Marked missed ✓' : 'Reverted ✓');
   if (!ok) return false;
-  b.submitted = submitted; b.missed = missed; b.missed_reason = missed ? reason : ''; b.pct = pct;
+  b.submitted = submitted; b.missed = missed; b.missed_reason = missed ? reason : ''; b.pct = pct; b.submitted_at = submitted ? new Date().toISOString() : null;
   closeDrawer(); render(); updateKPIs();
   return true;
 }
@@ -1050,6 +1233,10 @@ document.getElementById('d-body').addEventListener('click', e => {
     case 'open-checklist': buildDrawer(b, 'checklist'); document.getElementById('drawer').scrollTop = 0; break;
     case 'close':  closeDrawer(); break;
     case 'edit':   openForm(b); break;
+    case 'outcome': openOutcomeModal(b); break;
+    case 'add-report': openReportModal(b); break;
+    case 'edit-report': openReportModal(b, el.dataset.rid); break;
+    case 'delete-report': deleteReport(b, el.dataset.rid); break;
     case 'remind': openRemindModal(b); break;
     case 'submit': setStatus(b, 'submitted'); break;
     case 'missed': openMissedModal(b); break;
@@ -1078,7 +1265,17 @@ function render() {
     if (currentAnchor !== 'all' && b.anchor !== currentAnchor) return false;
     return true;
   });
-  grid.innerHTML = visible.map(buildCard).join('');
+  const sorted = sortByDeadline(visible);
+  let html = '', lastGroup = -1;
+  sorted.forEach(b => {
+    const g = deadlineGroup(b);
+    if (g !== lastGroup) {
+      html += `<div class="grp-label">${GROUP_LABELS[g]} <span class="count-pill">${sorted.filter(x => deadlineGroup(x) === g).length}</span></div>`;
+      lastGroup = g;
+    }
+    html += buildCard(b);
+  });
+  grid.innerHTML = html;
   document.getElementById('vis-count').textContent = visible.length;
   document.getElementById('empty').hidden = visible.length > 0;
 }
@@ -1354,6 +1551,100 @@ remindOverlay.addEventListener('click', e => { if (e.target === remindOverlay) c
 document.getElementById('remind-send').addEventListener('click', sendReminder);
 document.getElementById('rm-history-btn').addEventListener('click', () => loadReminderHistory());
 
+// ── BID OUTCOME & FEEDBACK ─────────────────────────────────────────────
+const outcomeOverlay = document.getElementById('outcome-overlay');
+let outcomeBidId = null;
+function syncOutcomeReason() { document.getElementById('oc-reason-wrap').hidden = document.getElementById('oc-outcome').value !== 'Lost'; }
+function openOutcomeModal(b) {
+  outcomeBidId = b.id;
+  document.getElementById('oc-outcome').value  = b.outcome;
+  document.getElementById('oc-feedback').value = b.feedback;
+  document.getElementById('oc-reason').value   = b.loss_reason;
+  syncOutcomeReason();
+  outcomeOverlay.classList.add('open');
+  document.getElementById('oc-outcome').focus();
+}
+function closeOutcomeModal() { outcomeOverlay.classList.remove('open'); outcomeBidId = null; if (refreshPending) refreshBids(); }
+document.getElementById('oc-outcome').addEventListener('change', syncOutcomeReason);
+document.getElementById('outcome-close').addEventListener('click', closeOutcomeModal);
+document.getElementById('outcome-cancel').addEventListener('click', closeOutcomeModal);
+outcomeOverlay.addEventListener('click', e => { if (e.target === outcomeOverlay) closeOutcomeModal(); });
+document.getElementById('outcome-save').addEventListener('click', async () => {
+  const b = bids.find(x => x.id === outcomeBidId);
+  if (!b || !sb) return;
+  const outcome = document.getElementById('oc-outcome').value;
+  const payload = {
+    outcome,
+    feedback: document.getElementById('oc-feedback').value.trim(),
+    loss_reason: outcome === 'Lost' ? document.getElementById('oc-reason').value.trim() : '',   // the reason only applies to lost bids
+  };
+  const btn = document.getElementById('outcome-save');
+  btn.disabled = true;
+  try {
+    const { ok } = await save(sb.from('bids').update(payload).eq('id', b.id).select('id'), 'Outcome saved ✓');
+    if (!ok) return;
+    Object.assign(b, payload);
+    closeOutcomeModal(); render(); refreshDrawer(b);
+  } finally { btn.disabled = false; }
+});
+
+// ── PROGRESS REPORTS (won bids) ────────────────────────────────────────
+const reportOverlay = document.getElementById('report-overlay');
+let reportBidId = null, editingReportId = null;
+const RP_INPUTS = { report_date: 'rp-date', current_status: 'rp-status', progress_update: 'rp-update', work_completed: 'rp-work',
+                    challenges: 'rp-challenges', delays: 'rp-delays', delay_reasons: 'rp-delay-reasons', delay_actions: 'rp-delay-actions' };
+const todayISO = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+function openReportModal(b, reportId = null) {
+  reportBidId = b.id; editingReportId = reportId;
+  const r = reportId ? (reportCache[b.id] || []).find(x => x.id === reportId) : null;
+  if (reportId && !r) return;
+  document.getElementById('rp-title').textContent = r ? 'Edit Progress Report' : 'New Progress Report';
+  for (const [field, id] of Object.entries(RP_INPUTS)) document.getElementById(id).value = r ? (r[field] || '') : '';
+  if (!r) document.getElementById('rp-date').value = todayISO();
+  reportOverlay.classList.add('open');
+  document.getElementById(r ? 'rp-update' : 'rp-date').focus();
+}
+function closeReportModal() { reportOverlay.classList.remove('open'); reportBidId = null; editingReportId = null; if (refreshPending) refreshBids(); }
+document.getElementById('report-close').addEventListener('click', closeReportModal);
+document.getElementById('report-cancel').addEventListener('click', closeReportModal);
+reportOverlay.addEventListener('click', e => { if (e.target === reportOverlay) closeReportModal(); });
+
+document.getElementById('report-save').addEventListener('click', async () => {
+  const b = bids.find(x => x.id === reportBidId);
+  if (!b || !sb) return;
+  const payload = {};
+  for (const [field, id] of Object.entries(RP_INPUTS)) payload[field] = document.getElementById(id).value.trim();
+  if (!parseDate(payload.report_date)) { showToast('Please choose the report date', true); document.getElementById('rp-date').focus(); return; }
+  if (![...RP_FIELDS.map(f => f[0]), 'current_status'].some(k => payload[k])) { showToast('Add at least one detail to the report', true); return; }
+
+  const btn = document.getElementById('report-save');
+  btn.disabled = true;
+  try {
+    if (editingReportId) {
+      const { ok } = await save(sb.from('bid_progress_reports').update(payload).eq('id', editingReportId).select('id'), 'Report updated ✓');
+      if (!ok) return;
+      const r = reportCache[b.id].find(x => x.id === editingReportId);
+      Object.assign(r, payload);
+    } else {
+      const { ok, data } = await save(sb.from('bid_progress_reports').insert([{ ...payload, bid_id: b.id }]).select().single(), 'Report added ✓');
+      if (!ok) return;                                       // keep the window open so nothing typed is lost
+      reportCache[b.id] = [...(reportCache[b.id] || []), data];
+    }
+    reportCache[b.id] = sortReports(reportCache[b.id]);
+    closeReportModal(); renderReportsList(b.id);
+  } finally { btn.disabled = false; }
+});
+
+async function deleteReport(b, reportId) {
+  const r = (reportCache[b.id] || []).find(x => x.id === reportId);
+  if (!r || !confirm('Delete the progress report dated ' + fmtDate(r.report_date) + '? This cannot be undone.')) return;
+  const { ok } = await save(sb.from('bid_progress_reports').delete().eq('id', reportId).select('id'), 'Report deleted ✓');
+  if (!ok) return;
+  reportCache[b.id] = reportCache[b.id].filter(x => x.id !== reportId);
+  renderReportsList(b.id);
+}
+
 // ── ADD / EDIT BID FORM ────────────────────────────────────────────────
 const formOverlay  = document.getElementById('form-overlay');
 const openFormBtn  = document.getElementById('open-form-btn');
@@ -1384,10 +1675,9 @@ function openForm(bid = null) {
     document.getElementById('f-mode').value      = bid.mode;
     document.getElementById('f-anchor').value    = bid.anchor === '—' ? '' : bid.anchor;
     document.getElementById('f-comments').value  = bid.comments;
+    document.getElementById('f-overview').value     = bid.overview.summary;
     document.getElementById('f-scope').value        = bid.overview.scope;
     document.getElementById('f-capacity').value     = bid.overview.capacity;
-    document.getElementById('f-requirements').value = bid.overview.requirements;
-    document.getElementById('f-other').value        = bid.overview.other;
   } else {
     addDocRow();
   }
@@ -1549,10 +1839,9 @@ document.getElementById('new-bid-form').addEventListener('submit', async e => {
     mode:              document.getElementById('f-mode').value,
     comments:          document.getElementById('f-comments').value.trim(),
     overview: {
-      scope:        document.getElementById('f-scope').value.trim(),
-      capacity:     document.getElementById('f-capacity').value.trim(),
-      requirements: document.getElementById('f-requirements').value.trim(),
-      other:        document.getElementById('f-other').value.trim(),
+      summary:  document.getElementById('f-overview').value.trim(),
+      scope:    document.getElementById('f-scope').value.trim(),
+      capacity: document.getElementById('f-capacity').value.trim(),
     },
   };
 
@@ -1665,7 +1954,7 @@ async function loadBids() {
 // Re-fetch so changes made by other people show up. Skipped while a drawer/form is
 // open or a save is in flight (so nothing under the user's hands gets replaced).
 function isBusy() {
-  return pendingSaves > 0 || overlay.classList.contains('open') || formOverlay.classList.contains('open') || missedOverlay.classList.contains('open') || remindOverlay.classList.contains('open');
+  return pendingSaves > 0 || overlay.classList.contains('open') || formOverlay.classList.contains('open') || missedOverlay.classList.contains('open') || remindOverlay.classList.contains('open') || outcomeOverlay.classList.contains('open') || reportOverlay.classList.contains('open');
 }
 
 async function refreshBids() {
@@ -1699,7 +1988,7 @@ const FORMER_ANCHORS = ['sakeenah'];
 
 function refreshAnchors() {
   // Build unique anchor list from all bids (current anchors only)
-  const known = new Set(['Esther', 'Rahama', 'Samuel']);
+  const known = new Set(['Esther', 'Ezekiel', 'Rahama', 'Samuel']);
   bids.forEach(b => {
     if (b.anchor && b.anchor !== '—' && !FORMER_ANCHORS.includes(b.anchor.trim().toLowerCase())) known.add(b.anchor);
   });
