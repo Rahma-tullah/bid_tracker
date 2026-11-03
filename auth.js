@@ -66,6 +66,8 @@
     html[data-role="editor"] [data-act="delete"], html[data-role="editor"] [data-act="delete-report"] { display: none !important; }
     .auth-who { color: var(--g200, #bbf7d0); font-size: .75rem; white-space: nowrap; }
     .auth-out { color: var(--g200, #bbf7d0); font-size: .75rem; font-weight: 600; border: 1px solid rgba(255,255,255,.22); border-radius: 6px; padding: 5px 11px; background: none; cursor: pointer; white-space: nowrap; }
+    .auth-link { color: var(--g200, #bbf7d0); font-size: .75rem; font-weight: 600; border: 1px solid rgba(255,255,255,.22); border-radius: 6px; padding: 5px 11px; white-space: nowrap; }
+    .auth-link:hover { background: rgba(255,255,255,.12); }
     .auth-out:hover { background: rgba(255,255,255,.12); }
     @media (max-width: 600px) { .auth-who { display: none; } }`;
   document.head.appendChild(style);
@@ -82,6 +84,11 @@
       out.className = 'auth-out'; out.type = 'button'; out.textContent = 'Sign out';
       out.addEventListener('click', PPAuth.signOut);
       nav.prepend(out); nav.prepend(who);
+      if (role === 'admin' && !/(^|\/)audit\.html$/.test(location.pathname)) {      // admins get a link to the audit log
+        const a = document.createElement('a');
+        a.className = 'auth-link'; a.href = 'audit.html'; a.textContent = 'Audit log'; a.style.textDecoration = 'none';
+        nav.prepend(a);
+      }
     });
   }
 
