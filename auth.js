@@ -25,7 +25,7 @@
     return;
   }
 
-  const PPAuth = window.PPAuth = { requireLogin: REQUIRE_LOGIN, client: null, user: null, role: null, ready: null };
+  const PPAuth = window.PPAuth = { anonKey: SUPABASE_KEY, requireLogin: REQUIRE_LOGIN, client: null, user: null, role: null, ready: null };
 
   // One shared database client for the page, so every request carries the signed-in person's token.
   try { PPAuth.client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
@@ -88,6 +88,11 @@
         const a = document.createElement('a');
         a.className = 'auth-link'; a.href = 'audit.html'; a.textContent = 'Audit log'; a.style.textDecoration = 'none';
         nav.prepend(a);
+      }
+      if (role === 'admin' && !/(^|\/)users\.html$/.test(location.pathname)) {      // ...and to manage people
+        const u = document.createElement('a');
+        u.className = 'auth-link'; u.href = 'users.html'; u.textContent = 'Team'; u.style.textDecoration = 'none';
+        nav.prepend(u);
       }
     });
   }
