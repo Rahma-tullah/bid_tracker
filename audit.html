@@ -502,6 +502,9 @@ svg.ring { transform: rotate(-90deg); }
 .au-filters { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 14px; align-items: end; }
 .au-filters .form-field { min-width: 0; }
 .au-filters .form-input, .au-filters .form-select { padding: 8px 10px; font-size: .82rem; width: 100%; }
+.au-tabs { display: flex; gap: 8px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+.au-tab { font: inherit; font-size: .88rem; font-weight: 700; padding: 9px 18px; border: none; background: none; color: var(--fg-muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.au-tab[aria-selected="true"] { color: var(--g900); border-bottom-color: var(--g700); }
 .au-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: .8rem; color: var(--fg-muted); }
 .au-btn { font-size: .78rem; font-weight: 600; padding: 7px 14px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--surface); color: var(--fg-2); cursor: pointer; }
 .au-btn:hover { border-color: var(--g700); color: var(--g700); }
@@ -545,11 +548,12 @@ svg.ring { transform: rotate(-90deg); }
 <div class="page wide">
   <div id="denied" class="au-denied" hidden></div>
   <div id="main" hidden>
-    <p class="au-intro">A permanent record of changes to bids, projects, progress reports, anchor emails and reminder settings. Entries can't be edited or deleted. Times are shown in Nigerian time. Until each person signs in, changes made through the website show as "Not signed in".</p>
+    <div class="au-tabs" role="tablist"><button type="button" class="au-tab" id="tab-bids" data-log="bids" role="tab">Bids log</button><button type="button" class="au-tab" id="tab-projects" data-log="projects" role="tab">Projects log</button></div>
+    <p class="au-intro">Two separate permanent records: the Bids log (bids, progress reports, anchor emails, reminder settings, user roles) and the Projects log. Entries can't be edited or deleted. Times are shown in Nigerian time. Until each person signs in, changes made through the website show as "Not signed in".</p>
 
     <div class="au-filters">
       <div class="form-field"><label class="form-label" for="f-table">Record type</label>
-        <select class="form-select" id="f-table"><option value="">All</option><option value="bids">Bids</option><option value="projects">Projects</option><option value="bid_progress_reports">Progress reports</option><option value="anchor_contacts">Anchor emails</option><option value="reminder_settings">Reminder settings</option><option value="app_users">User roles</option></select></div>
+        <select class="form-select" id="f-table"></select></div>
       <div class="form-field"><label class="form-label" for="f-action">Action</label>
         <select class="form-select" id="f-action"><option value="">All</option><option value="insert">Created</option><option value="update">Edited</option><option value="delete">Deleted</option></select></div>
       <div class="form-field"><label class="form-label" for="f-who">Person (email)</label><input class="form-input" id="f-who" type="text" placeholder="e.g. samuel" autocomplete="off"></div>
@@ -572,6 +576,11 @@ svg.ring { transform: rotate(-90deg); }
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const PAGE = 100, EXPORT_MAX = 5000;
+const SCOPES = {
+  bids: { title: 'Bids log', tables: ['bids', 'bid_progress_reports', 'anchor_contacts', 'reminder_settings', 'app_users'] },
+  projects: { title: 'Projects log', tables: ['projects'] },
+};
+let scope = new URLSearchParams(location.search).get('log') === 'projects' ? 'projects' : 'bids';
 
 // theme shared with the other pages
 const themeBtn = $('theme-btn'), root = document.documentElement;
@@ -662,6 +671,7 @@ function currentFilters() {
   return { table: $('f-table').value, action: $('f-action').value, who: $('f-who').value.trim(), record: $('f-record').value.trim(), from: $('f-from').value, to: $('f-to').value };
 }
 function applyFilters(q, f) {
+  q = q.in('table_name', SCOPES[scope].tables);
   if (f.table) q = q.eq('table_name', f.table);
   if (f.action) q = q.eq('action', f.action);
   if (f.who) q = q.ilike('actor_email', '%' + f.who.replace(/[%_]/g, '') + '%');
@@ -703,10 +713,20 @@ $('au-export').addEventListener('click', async () => {
     const lines = [head.map(csvCell).join(',')].concat(all.map(r => [fmtTime(r.occurred_at), whoOf(r), r.actor_role || '', r.source, r.ip || '', r.action, TABLE_LABEL[r.table_name] || r.table_name, r.record_label || '', describeChanges(r).map(l => l.text).join(' | '), r.request_id || ''].map(csvCell).join(',')));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'audit-log-' + new Date().toISOString().slice(0, 10) + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+    a.download = 'audit-log-' + scope + '-' + new Date().toISOString().slice(0, 10) + '.csv'; document.body.appendChild(a); a.click(); a.remove();
     showToast('Exported ' + all.length + ' entr' + (all.length === 1 ? 'y' : 'ies') + ' ✓');
   } finally { btn.disabled = false; btn.textContent = '⬇ Export CSV'; }
 });
+
+function setScope(sc, first) {
+  scope = sc; document.title = SCOPES[sc].title + ' – Prado Power';
+  for (const k of Object.keys(SCOPES)) $('tab-' + k).setAttribute('aria-selected', k === sc ? 'true' : 'false');
+  const sel = $('f-table'), t = SCOPES[sc].tables;
+  sel.innerHTML = '<option value="">All</option>' + (t.length > 1 ? t.map(x => '<option value="' + x + '">' + esc(TABLE_LABEL[x]) + '</option>').join('') : '');
+  sel.closest('.form-field').hidden = t.length < 2;
+  if (!first) { try { history.replaceState(null, '', '?log=' + sc); } catch (e) {} ['f-action', 'f-who', 'f-record', 'f-from', 'f-to'].forEach(id => $(id).value = ''); load(true); }
+}
+document.querySelectorAll('.au-tab').forEach(b => b.addEventListener('click', () => { if (b.dataset.log !== scope) setScope(b.dataset.log, false); }));
 
 // ── access: admins only ──
 function denied(title, text) { $('main').hidden = true; $('denied').hidden = false; $('denied').innerHTML = '<h2>' + esc(title) + '</h2><p>' + esc(text) + '</p>'; }
@@ -715,7 +735,7 @@ function denied(title, text) { $('main').hidden = true; $('denied').hidden = fal
   if (!window.PPAuth || !PPAuth.client) { denied('Not available', 'Sign-in support could not start.'); return; }
   if (!(await PPAuth.accessToken())) { location.replace('login.html?next=audit.html'); return; }       // this page always needs a login
   if (PPAuth.role !== 'admin') { denied('Admins only', 'The audit log can only be read by an administrator.'); return; }
-  $('main').hidden = false; load(true);
+  $('main').hidden = false; setScope(scope, true); load(true);
 });
 </script>
 </body></html>
