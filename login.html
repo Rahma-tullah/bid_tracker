@@ -235,6 +235,12 @@ $('v-setpw').addEventListener('submit', async e => {
     show('v-setpw'); $('sp-pass').focus();
     return;
   }
+  const mode = params.get('mode');
+  if (mode === 'setpassword') {                                        // a signed-in person choosing (or changing) their password
+    if (session) { show('v-setpw'); $('sp-pass').focus(); return; }
+    show('v-signin'); note('Please sign in first, or use "Forgot your password?" to get a link by email.'); return;
+  }
+  if (mode === 'forgot') { show('v-forgot'); $('fg-email').focus(); return; }
   if (session) { goNext(); return; }                                   // already signed in
   show('v-signin'); $('si-email').focus();
 })();

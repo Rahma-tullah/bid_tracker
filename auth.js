@@ -17,6 +17,14 @@
   const REQUIRE_LOGIN = (typeof window.PP_REQUIRE_LOGIN === 'boolean') ? window.PP_REQUIRE_LOGIN : false;
   const IS_LOGIN_PAGE = /(^|\/)login\.html$/.test(location.pathname);
 
+  // Invite, password-reset and expired-link emails land on the Site URL (the start page), with the person's token in the
+  // address. Hand them to the login page straight away, token intact, before anything else reads or clears it.
+  if (!IS_LOGIN_PAGE && /[#&](type=(invite|recovery)|error_code=|error_description=)/.test(location.hash || '')) {
+    document.documentElement.style.visibility = 'hidden';
+    location.replace('login.html' + location.hash);
+    return;
+  }
+
   const PPAuth = window.PPAuth = { requireLogin: REQUIRE_LOGIN, client: null, user: null, role: null, ready: null };
 
   // One shared database client for the page, so every request carries the signed-in person's token.
