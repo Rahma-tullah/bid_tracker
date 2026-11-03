@@ -1,9 +1,9 @@
 /* Prado Power - shared sign-in support for every page (start page, Bid Tracker, Project Tracker, login page).
  *
  * THE SWITCH: REQUIRE_LOGIN below.
- *   false (today): the site works exactly as before. If someone happens to be signed in, their name and a
+ *   false: the site works with no login at all. If someone happens to be signed in, their name and a
  *                  Sign out button appear in the header and the role rules below apply.
- *   true:          every page except login.html sends visitors who are not signed in to the login page,
+ *   true (today): every page except login.html sends visitors who are not signed in to the login page,
  *                  and shows nothing until the person's account and role have been checked.
  * The real protection is in the database (row-level security). Hiding buttons here is only a convenience.
  *
@@ -14,7 +14,7 @@
   'use strict';
   const SUPABASE_URL = 'https://sspdpjrytzyqklwevuil.supabase.co';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcGRwanJ5dHp5cWtsd2V2dWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0OTIyNDYsImV4cCI6MjEwNzA2ODI0Nn0.lYk5wjhNZ4tOynK7Zt1dPwO8epvo1EFr5tnAD9o5EUI';   // the public (anon) key; it is safe to ship in the page
-  const REQUIRE_LOGIN = (typeof window.PP_REQUIRE_LOGIN === 'boolean') ? window.PP_REQUIRE_LOGIN : false;
+  const REQUIRE_LOGIN = (typeof window.PP_REQUIRE_LOGIN === 'boolean') ? window.PP_REQUIRE_LOGIN : true;
   const IS_LOGIN_PAGE = /(^|\/)login\.html$/.test(location.pathname);
 
   // Invite, password-reset and expired-link emails land on the Site URL (the start page), with the person's token in the

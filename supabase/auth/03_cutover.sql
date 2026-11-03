@@ -31,4 +31,5 @@ create policy bid_progress_reports_delete on public.bid_progress_reports for del
 
 -- Admins can read the audit log (nobody else, and nobody can change it).
 grant select on public.audit_log to authenticated;
+drop policy if exists audit_admin_read on public.audit_log;   -- safe to re-run
 create policy audit_admin_read on public.audit_log for select to authenticated using (public.app_role() = 'admin');
