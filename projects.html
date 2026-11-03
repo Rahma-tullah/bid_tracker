@@ -3,6 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="auth.js"></script>
 <style>
 /* === TOKENS: green/white brand, clean data UI === */
 :root {
@@ -594,7 +595,7 @@ svg.ring { transform: rotate(-90deg); }
 const SUPABASE_URL = 'https://sspdpjrytzyqklwevuil.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcGRwanJ5dHp5cWtsd2V2dWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0OTIyNDYsImV4cCI6MjEwNzA2ODI0Nn0.lYk5wjhNZ4tOynK7Zt1dPwO8epvo1EFr5tnAD9o5EUI';
 let sb = null;
-try { if (SUPABASE_URL.startsWith('http')) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
+try { if (SUPABASE_URL.startsWith('http')) sb = (window.PPAuth && PPAuth.client) || window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
 catch(e) { console.error('Supabase init failed:', e); }
 
 let projects = [];
@@ -879,7 +880,10 @@ try { const saved = localStorage.getItem('pp_theme'); if (saved) applyTheme(save
 themeBtn.addEventListener('click', () => applyTheme(root.dataset.theme === 'dark' ? 'light' : 'dark'));
 
 document.getElementById('today-date').textContent = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-loadProjects().then(() => {
+// Load data only once the sign-in check (auth.js) has passed; with the switch off it always passes.
+(window.PPAuth ? PPAuth.ready : Promise.resolve(true)).then(async ok => {
+  if (!ok) return;
+  await loadProjects();
   if (!sb) return;
   setInterval(refreshProjects, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshProjects(); });

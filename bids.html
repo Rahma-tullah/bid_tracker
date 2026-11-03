@@ -4,6 +4,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="auth.js"></script>
 
 <style>
 /* === TOKENS: green/white brand, clean data UI === */
@@ -810,7 +811,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 let sb = null;
 try {
   if (SUPABASE_URL.startsWith('http')) {
-    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    sb = (window.PPAuth && PPAuth.client) || window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);   // shared client: carries the signed-in person's token
   }
 } catch(e) { console.error('Supabase init failed:', e); }
 
@@ -1459,7 +1460,7 @@ async function callReminderApi(payload) {
   try {
     const res = await fetch(REMINDER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + ((window.PPAuth && await PPAuth.accessToken()) || SUPABASE_KEY), 'apikey': SUPABASE_KEY },
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => null);
@@ -2033,7 +2034,8 @@ const d = new Date();
 document.getElementById('today-date').textContent =
   d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
-loadBids().then(startLiveUpdates);
+// Load data only once the sign-in check (auth.js) has passed; with the switch off it always passes.
+(window.PPAuth ? PPAuth.ready : Promise.resolve(true)).then(ok => { if (ok) loadBids().then(startLiveUpdates); });
 </script>
 
 </body></html>
