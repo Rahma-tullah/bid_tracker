@@ -60,7 +60,7 @@
     html[data-role="viewer"] [data-act="submit"], html[data-role="viewer"] [data-act="missed"],
     html[data-role="viewer"] [data-act="revert"], html[data-role="viewer"] [data-act="delete"],
     html[data-role="viewer"] [data-act="outcome"], html[data-role="viewer"] [data-act="add-report"],
-    html[data-role="viewer"] [data-act="remove-section"], html[data-role="viewer"] [data-act="add-section"],
+    html[data-role="viewer"] [data-act="remove-section"], html[data-role="viewer"] [data-act="add-section"], html[data-role="viewer"] [data-act="import-xlsx"],
     html[data-role="viewer"] .add-item-row, html[data-role="viewer"] .item-remove, html[data-role="viewer"] .item-na { display: none !important; }
     html[data-role="viewer"] .chk { pointer-events: none; }
     html[data-role="editor"] [data-act="delete"], html[data-role="editor"] [data-act="delete-report"] { display: none !important; }

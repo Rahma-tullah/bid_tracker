@@ -299,6 +299,25 @@ svg.ring { transform: rotate(-90deg); }
   font-size: .82rem; font-weight: 700; color: var(--g700); margin-bottom: 3px;
 }
 .xlsx-zone-sub { font-size: .72rem; color: var(--fg-muted); }
+.import-drawer { max-width: 640px; }
+.imp-note { font-size: .8rem; color: var(--fg-muted); line-height: 1.5; margin-bottom: 12px; }
+.imp-sum { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.imp-chip { font-size: .72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+.imp-chip.new { background: var(--g100); color: var(--g900); }
+.imp-chip.kept { background: var(--g50); color: var(--fg-2); border: 1px solid var(--border); }
+.imp-chip.gone { background: var(--red-bg); color: var(--red); }
+.imp-group { margin-bottom: 14px; }
+.imp-group h4 { font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-muted); margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.imp-group h4 button { font: inherit; font-size: .72rem; text-transform: none; letter-spacing: 0; background: none; border: none; color: var(--g700); cursor: pointer; font-weight: 600; }
+.imp-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 4px; font-size: .8rem; background: var(--surface); }
+.imp-item .d { flex: 1; overflow-wrap: anywhere; }
+.imp-item .m { color: var(--fg-muted); font-size: .72rem; white-space: nowrap; }
+.imp-item.new { border-left: 3px solid var(--g500); }
+.imp-item.gone { border-left: 3px solid var(--red); background: var(--red-bg); }
+.imp-item.gone.done { border-left-width: 5px; }
+.imp-item label { display: flex; align-items: center; gap: 6px; font-size: .72rem; color: var(--fg-2); white-space: nowrap; cursor: pointer; }
+.imp-warn { color: var(--red); font-weight: 700; font-size: .7rem; }
+.imp-scroll { max-height: 22vh; overflow: auto; }
 .xlsx-status {
   border-radius: 8px; padding: 10px 14px; font-size: .8rem; font-weight: 500;
   margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
@@ -627,18 +646,18 @@ svg.ring { transform: rotate(-90deg); }
 
       <!-- CHECKLIST SECTION -->
       <div class="dept-adder">
-        <div class="dept-adder-label">Checklist Documents</div>
+        <div class="dept-adder-label" id="dept-adder-label">Checklist Documents</div>
 
         <!-- Excel upload -->
         <div class="xlsx-zone" id="xlsx-zone">
           <input type="file" id="xlsx-file" accept=".xlsx,.xls">
           <span class="xlsx-icon">📊</span>
-          <div class="xlsx-zone-title">Upload Checklist Excel</div>
-          <div class="xlsx-zone-sub">Drop a .xlsx file here or click to browse — we'll read the document rows automatically</div>
+          <div class="xlsx-zone-title" id="xlsx-zone-title">Upload Checklist Excel</div>
+          <div class="xlsx-zone-sub" id="xlsx-zone-sub">Drop a .xlsx file here or click to browse — we'll read the document rows automatically</div>
         </div>
         <div class="xlsx-status" id="xlsx-status" hidden></div>
 
-        <div class="dept-adder-divider">or add rows manually</div>
+        <div class="dept-adder-divider" id="dept-adder-divider">or add rows manually</div>
 
         <div id="doc-rows"></div>
         <button type="button" class="add-doc-btn" id="add-doc-btn">+ Add Document Row</button>
@@ -649,6 +668,22 @@ svg.ring { transform: rotate(-90deg); }
         <button type="submit" class="btn-save" id="save-btn">Save Bid →</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- CHECKLIST IMPORT REVIEW (existing bid) -->
+<input type="file" id="xlsx-update-file" accept=".xlsx,.xls" hidden>
+<div class="form-overlay" id="import-overlay">
+  <div class="form-drawer import-drawer">
+    <div class="form-head">
+      <div class="form-title" id="imp-title">Review checklist update</div>
+      <button class="close-btn" id="imp-close" aria-label="Close">✕</button>
+    </div>
+    <div id="imp-body"></div>
+    <div class="form-actions">
+      <button type="button" class="btn-cancel" id="imp-cancel">Cancel — change nothing</button>
+      <button type="button" class="btn-save" id="imp-apply">Apply update</button>
+    </div>
   </div>
 </div>
 
@@ -997,7 +1032,7 @@ function buildCard(b) {
 //   'details'   -> overview, deadlines, status, missed reason, notes, checklist summary and the bid actions
 //   'checklist' -> only the document checklist (check/uncheck, add/remove), plus a Close button
 function checklistHtml(b) {
-  let html = '';
+  let html = `<div class="add-item-row" style="margin-bottom:12px"><button type="button" class="btn-add-item" data-act="import-xlsx" title="Update this checklist from an Excel file (you review the changes first)">⬆ Upload Excel checklist</button></div>`;
   for (const [section, items] of Object.entries(b.sections)) {
     const counted = items.filter(i => i.status !== 'N/A');
     const ok = counted.filter(i => i.status === 'Available').length;
@@ -1231,6 +1266,7 @@ document.getElementById('d-body').addEventListener('click', e => {
       commitSections(b, s => { s[name] = []; });
       break;
     }
+    case 'import-xlsx': updateFileInput.click(); break;
     case 'open-checklist': buildDrawer(b, 'checklist'); document.getElementById('drawer').scrollTop = 0; break;
     case 'close':  closeDrawer(); break;
     case 'edit':   openForm(b); break;
@@ -1662,7 +1698,12 @@ function openForm(bid = null) {
   document.getElementById('new-bid-form').reset();
   document.getElementById('form-title').textContent = bid ? 'Edit Bid' : 'Add New Bid';
   document.getElementById('save-btn').textContent = bid ? 'Save Changes' : 'Save Bid →';
-  document.querySelector('.dept-adder').hidden = !!bid;
+  // New bid: upload + manual rows. Existing bid: the upload zone only (it opens a review step; rows are edited in the checklist).
+  document.querySelector('.dept-adder').hidden = false;
+  document.getElementById('dept-adder-label').textContent = bid ? 'Checklist' : 'Checklist Documents';
+  document.getElementById('xlsx-zone-title').textContent = bid ? 'Upload an updated checklist Excel' : 'Upload Checklist Excel';
+  document.getElementById('xlsx-zone-sub').textContent = bid ? 'Same template as a new bid. You will review the changes before anything is saved.' : "Drop a .xlsx file here or click to browse — we'll read the document rows automatically";
+  ['dept-adder-divider', 'doc-rows', 'add-doc-btn'].forEach(id => document.getElementById(id).hidden = !!bid);
   document.getElementById('fr-wrap').hidden = !(bid && bid.missed);
   fillReason('fr', bid && bid.missed ? bid.missed_reason : '');
   docRowsEl.innerHTML = '';
@@ -1737,69 +1778,78 @@ function parseStatusValue(raw) {
   return 'Pending';
 }
 
+// Reads a checklist workbook (the same template for new and existing bids) and resolves { items, sheetName }.
+// Rejects with Error('empty') when no document rows were found and Error('unreadable') when the file can't be read.
+function parseChecklistFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('unreadable'));
+    reader.onload = function(ev) {
+      try {
+        const data = new Uint8Array(ev.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+
+        // Pick the most useful sheet: skip 'Summary' if others exist
+        let sheetName = wb.SheetNames[0];
+        if (wb.SheetNames.length > 1) {
+          const nonSummary = wb.SheetNames.find(n => !n.toLowerCase().includes('summary'));
+          if (nonSummary) sheetName = nonSummary;
+        }
+
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+        // Find header row (first row that has at least 2 non-empty cells)
+        let headerRowIdx = 0;
+        for (let i = 0; i < Math.min(rows.length, 6); i++) {
+          const nonEmpty = rows[i].filter(c => String(c).trim() !== '').length;
+          if (nonEmpty >= 2) { headerRowIdx = i; break; }
+        }
+
+        const headers = rows[headerRowIdx].map(h => String(h));
+        const docIdx    = findColIdx(headers, COL_ALIASES.doc);
+        const deptIdx   = findColIdx(headers, COL_ALIASES.dept);
+        const statusIdx = findColIdx(headers, COL_ALIASES.status);
+
+        // If we can't find a document column, fall back to second column (after S/N)
+        const resolvedDocIdx = docIdx >= 0 ? docIdx : (headers.length > 1 ? 1 : 0);
+
+        const items = [];
+        for (let i = headerRowIdx + 1; i < rows.length; i++) {
+          const row = rows[i];
+          const docVal = String(row[resolvedDocIdx] || '').trim();
+          if (!docVal || docVal.match(/^[-–—]$/)) continue; // skip blank / separator rows
+
+          const deptVal   = deptIdx >= 0   ? String(row[deptIdx] || '').trim()   : 'BD';
+          const statusVal = statusIdx >= 0  ? parseStatusValue(row[statusIdx])    : 'Pending';
+
+          items.push({
+            doc:    docVal,
+            dept:   deptVal || 'BD',
+            status: statusVal,
+          });
+        }
+        if (items.length === 0) { reject(new Error('empty')); return; }
+        resolve({ items, sheetName });
+      } catch (err) { reject(new Error('unreadable')); }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// New bid: fill the form rows. Existing bid: open the review step instead (nothing is saved yet).
 function loadXlsxFile(file) {
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    try {
-      const data = new Uint8Array(ev.target.result);
-      const wb = XLSX.read(data, { type: 'array' });
-
-      // Pick the most useful sheet: skip 'Summary' if others exist
-      let sheetName = wb.SheetNames[0];
-      if (wb.SheetNames.length > 1) {
-        const nonSummary = wb.SheetNames.find(n => !n.toLowerCase().includes('summary'));
-        if (nonSummary) sheetName = nonSummary;
-      }
-
-      const ws = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-
-      // Find header row (first row that has at least 2 non-empty cells)
-      let headerRowIdx = 0;
-      for (let i = 0; i < Math.min(rows.length, 6); i++) {
-        const nonEmpty = rows[i].filter(c => String(c).trim() !== '').length;
-        if (nonEmpty >= 2) { headerRowIdx = i; break; }
-      }
-
-      const headers = rows[headerRowIdx].map(h => String(h));
-      const docIdx    = findColIdx(headers, COL_ALIASES.doc);
-      const deptIdx   = findColIdx(headers, COL_ALIASES.dept);
-      const statusIdx = findColIdx(headers, COL_ALIASES.status);
-
-      // If we can't find a document column, fall back to second column (after S/N)
-      const resolvedDocIdx = docIdx >= 0 ? docIdx : (headers.length > 1 ? 1 : 0);
-
-      const items = [];
-      for (let i = headerRowIdx + 1; i < rows.length; i++) {
-        const row = rows[i];
-        const docVal = String(row[resolvedDocIdx] || '').trim();
-        if (!docVal || docVal.match(/^[-–—]$/)) continue; // skip blank / separator rows
-
-        const deptVal   = deptIdx >= 0   ? String(row[deptIdx] || '').trim()   : 'BD';
-        const statusVal = statusIdx >= 0  ? parseStatusValue(row[statusIdx])    : 'Pending';
-
-        items.push({
-          doc:    docVal,
-          dept:   deptVal || 'BD',
-          status: statusVal,
-        });
-      }
-
-      if (items.length === 0) {
-        showXlsxStatus('err', '⚠️ No document rows found in this sheet. Try a different sheet or add rows manually.');
-        return;
-      }
-
-      // Clear manual rows and populate from Excel
-      docRowsEl.innerHTML = '';
-      items.forEach(it => addDocRow(it.doc, DEPTS.includes(it.dept) ? it.dept : 'BD', it.status));
-
-      showXlsxStatus('ok', `✅ Loaded ${items.length} documents from "${sheetName}" — review and edit below.`);
-    } catch(err) {
-      showXlsxStatus('err', '⚠️ Could not read that file. Make sure it\'s a valid .xlsx or .xls file.');
-    }
-  };
-  reader.readAsArrayBuffer(file);
+  parseChecklistFile(file).then(({ items, sheetName }) => {
+    if (editingId) { startChecklistImport(editingId, items, sheetName, file.name); return; }
+    // Clear manual rows and populate from Excel
+    docRowsEl.innerHTML = '';
+    items.forEach(it => addDocRow(it.doc, DEPTS.includes(it.dept) ? it.dept : 'BD', it.status));
+    showXlsxStatus('ok', `✅ Loaded ${items.length} documents from "${sheetName}" — review and edit below.`);
+  }).catch(err => {
+    showXlsxStatus('err', err.message === 'empty'
+      ? '⚠️ No document rows found in this sheet. Try a different sheet or add rows manually.'
+      : '⚠️ Could not read that file. Make sure it\'s a valid .xlsx or .xls file.');
+  });
 }
 
 function showXlsxStatus(type, msg) {
@@ -1822,6 +1872,115 @@ xlsxZone.addEventListener('drop', e => {
   xlsxZone.classList.remove('drag-over');
   const file = e.dataTransfer.files[0];
   if (file) loadXlsxFile(file);
+});
+
+// ── UPDATE AN EXISTING BID'S CHECKLIST FROM EXCEL ──────────────────────
+// Nothing is saved on upload. A review step shows what is new, what stays (with its current status kept) and what the new
+// file no longer contains; the person chooses what to keep, then confirms. Saving goes through commitSections (rolls back on failure).
+const importOverlay = document.getElementById('import-overlay');
+let importPlan = null;
+
+const docKey = d => String(d || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const normDept = d => DEPTS.find(x => x.toLowerCase() === String(d || '').trim().toLowerCase()) || 'BD';
+
+// Compare the uploaded rows with the bid's current checklist.
+function buildImportPlan(b, items) {
+  const existing = [];
+  Object.entries(b.sections).forEach(([sec, list]) => list.forEach((it, i) => existing.push({ sec, i, it, key: docKey(it.doc), used: false })));
+  const kept = [], added = [];
+  items.forEach(x => {
+    const dept = normDept(x.dept), m = existing.find(e => !e.used && e.key === docKey(x.doc));
+    if (m) { m.used = true; kept.push({ ref: m, doc: m.it.doc, status: m.it.status, oldDept: m.it.dept, newDept: dept }); }
+    else added.push({ doc: x.doc, dept, status: x.status });
+  });
+  return { kept, added, removed: existing.filter(e => !e.used) };
+}
+
+function startChecklistImport(bidId, items, sheetName, fileName) {
+  const b = bids.find(x => x.id === bidId);
+  if (!b) { showToast('That bid no longer exists', true); return; }
+  const plan = buildImportPlan(b, items);
+  importPlan = { bidId, ...plan, keepRemoved: new Set(), sheetName, fileName, total: items.length };
+  renderImportReview(b);
+  importOverlay.classList.add('open');
+  importOverlay.querySelector('.form-drawer').scrollTop = 0;
+}
+
+function renderImportReview(b) {
+  const P = importPlan, keepN = P.keepRemoved.size, goneN = P.removed.length - keepN;
+  const deptChanged = P.kept.filter(k => k.oldDept !== k.newDept).length;
+  const item = (cls, doc, meta, extra = '') => `<div class="imp-item ${cls}"><span class="d">${esc(doc)}</span><span class="m">${meta}</span>${extra}</div>`;
+  const statusLabel = st => st === 'Available' ? 'Available' : st === 'N/A' ? 'N/A' : 'Pending';
+  document.getElementById('imp-title').textContent = 'Review checklist update';
+  document.getElementById('imp-body').innerHTML = `
+    <div class="imp-note">Bid: <b>${esc(b.name)}</b> · from <b>${esc(P.fileName || 'file')}</b> (sheet “${esc(P.sheetName)}”, ${P.total} rows). <b>Nothing has been changed yet.</b>
+      Documents that are in both lists keep their current status (Available / Pending / N/A).</div>
+    <div class="imp-sum">
+      <span class="imp-chip new">${P.added.length} new</span>
+      <span class="imp-chip kept">${P.kept.length} already there${deptChanged ? ` (${deptChanged} department change${deptChanged === 1 ? '' : 's'})` : ''}</span>
+      <span class="imp-chip gone">${goneN} to be removed${keepN ? ` · ${keepN} kept` : ''}</span>
+    </div>
+    ${P.added.length ? `<div class="imp-group"><h4>New items (will be added${P.added.length ? ' to “' + esc(importTargetSection(b)) + '”' : ''})</h4><div class="imp-scroll">${P.added.map(a => item('new', a.doc, esc(a.dept) + ' · ' + statusLabel(a.status))).join('')}</div></div>` : ''}
+    ${P.removed.length ? `<div class="imp-group"><h4><span>No longer in the new file</span><span><button type="button" data-imp="keep-all">Keep all</button> <button type="button" data-imp="remove-all">Remove all</button></span></h4><div class="imp-scroll">${P.removed.map((r, n) => {
+      const done = r.it.status === 'Available';
+      return item('gone' + (done ? ' done' : ''), r.it.doc, esc(r.it.dept) + ' · ' + statusLabel(r.it.status), `${done ? '<span class="imp-warn">already obtained</span>' : ''}<label><input type="checkbox" data-imp-keep="${n}"${P.keepRemoved.has(n) ? ' checked' : ''}> Keep</label>`);
+    }).join('')}</div></div>` : ''}
+    ${P.kept.length ? `<div class="imp-group"><h4>Already in the checklist (status kept)</h4><div class="imp-scroll">${P.kept.map(k => item('', k.doc, esc(k.newDept) + ' · ' + statusLabel(k.status) + (k.oldDept !== k.newDept ? ' <b>(dept was ' + esc(k.oldDept) + ')</b>' : ''))).join('')}</div></div>` : ''}`;
+  document.getElementById('imp-apply').textContent = `Apply update (${P.added.length} added, ${goneN} removed)`;
+}
+
+// New items go into the "Documents" section, or the first section if the bid has no "Documents" section.
+function importTargetSection(b) {
+  const names = Object.keys(b.sections);
+  return names.includes('Documents') ? 'Documents' : (names[0] || 'Documents');
+}
+
+function closeImport() { importOverlay.classList.remove('open'); importPlan = null; }
+
+async function applyChecklistImport() {
+  const P = importPlan; if (!P) return;
+  const b = bids.find(x => x.id === P.bidId);
+  if (!b) { closeImport(); showToast('That bid no longer exists', true); return; }
+  const at = (sec, i) => sec + '\u0000' + i;
+  const drop = new Set(P.removed.filter((r, n) => !P.keepRemoved.has(n)).map(r => at(r.sec, r.i)));
+  const dept = new Map(P.kept.map(k => [at(k.ref.sec, k.ref.i), k.newDept]));
+  const target = importTargetSection(b), added = P.added.map(a => ({ doc: a.doc, dept: a.dept, status: a.status }));
+  // The checklist may have changed while the review was open (someone ticked or removed an item): stop rather than guess.
+  const unchanged = [...P.kept.map(k => k.ref), ...P.removed].every(r => b.sections[r.sec] && b.sections[r.sec][r.i] === r.it);
+  if (!unchanged) { closeImport(); showToast('This checklist changed while you were reviewing. Please upload the file again.', true); return; }
+  closeImport();
+  await commitSections(b, s => {
+    Object.keys(s).forEach(sec => {
+      s[sec] = s[sec].flatMap((it, i) => drop.has(at(sec, i)) ? [] : [dept.has(at(sec, i)) ? { ...it, dept: dept.get(at(sec, i)) } : it]);
+    });
+    if (!s[target]) s[target] = [];
+    s[target].push(...added);
+  });
+}
+
+importOverlay.addEventListener('change', e => {
+  const n = e.target.dataset && e.target.dataset.impKeep; if (n === undefined || !importPlan) return;
+  e.target.checked ? importPlan.keepRemoved.add(+n) : importPlan.keepRemoved.delete(+n);
+  renderImportReview(bids.find(x => x.id === importPlan.bidId));
+});
+importOverlay.addEventListener('click', e => {
+  if (e.target === importOverlay) { closeImport(); return; }
+  const a = e.target.dataset && e.target.dataset.imp; if (!a || !importPlan) return;
+  importPlan.keepRemoved = new Set(a === 'keep-all' ? importPlan.removed.map((_, n) => n) : []);
+  renderImportReview(bids.find(x => x.id === importPlan.bidId));
+});
+document.getElementById('imp-close').addEventListener('click', closeImport);
+document.getElementById('imp-cancel').addEventListener('click', closeImport);
+document.getElementById('imp-apply').addEventListener('click', applyChecklistImport);
+
+// Upload button inside the checklist view
+const updateFileInput = document.getElementById('xlsx-update-file');
+updateFileInput.addEventListener('change', function() {
+  const f = this.files && this.files[0]; this.value = '';
+  if (!f || !openBidId) return;
+  const id = openBidId;
+  parseChecklistFile(f).then(({ items, sheetName }) => startChecklistImport(id, items, sheetName, f.name))
+    .catch(err => showToast(err.message === 'empty' ? 'No document rows found in that file' : 'Could not read that file — use a valid .xlsx or .xls', true));
 });
 
 // ── FORM SUBMIT ────────────────────────────────────────────────────────
